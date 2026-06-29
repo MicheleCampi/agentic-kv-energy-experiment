@@ -1,0 +1,119 @@
+# PROTOCOL
+
+Protocollo sperimentale: firma energetica (tokens/joule e divergenza dual-basis)
+di un workload agentico ReAct-style attraverso il regime di KV-cache hit-rate.
+
+## Tesi operativa
+
+Il paper-fonte (arXiv:2605.26297) stabilisce che il workload agentico è
+decode-dominated *condizionatamente all'hit-rate*, ma misura solo tempo/token.
+Questo protocollo misura l'asse energia: come variano tokens/joule e la
+divergenza prefill/decode al variare dell'hit-rate, e dove la firma collassa
+quando la cache non regge (caso fallimento). L'ipotesi — da verificare sui dati,
+NON assunta — è che esista un "ginocchio" nella curva tokens/joule vs hit-rate,
+e che la divergenza dual-basis ne catturi la posizione/bruschezza.
+
+## Invariante
+
+- `enforce_eager=True` (CUDA graphs OFF) su tutte le run. Causa unica sulla
+  curva: l'hit-rate è il knob, non i graph. Coerente con cuda-graphs e
+  chunk-size experiments.
+
+## Asse primario: regime di KV-cache hit-rate
+
+L'hit-rate NON è un flag: è indotto dalla forma del traffico. Metodo:
+- **caldo (high hit)**: N richieste condividono un lungo prefisso comune
+  (system prompt + tool-def + storia accumulata); solo l'append per-turno è
+  nuovo input. Realizza l'alto riuso (target hit-rate alto, ~90%+).
+- **freddo (low hit)**: prefissi disgiunti tra richieste e/o prefix-cache
+  disabilitato; ogni turno ricomputa. Realizza il basso riuso.
+- **sweep**: livelli intermedi variando la frazione di prefisso condiviso.
+
+Livelli hit-rate target (da calibrare/confermare sul simulatore, poi sul nodo):
+
+| livello | descrizione                          | hit-rate target |
+|---------|--------------------------------------|-----------------|
+| H0      | cache fredda / disabilitata          | ~0% (CALIBRATE) |
+| H1      | prefisso parzialmente condiviso      | ~50% (CALIBRATE)|
+| H2      | prefisso largamente condiviso        | ~85% (CALIBRATE)|
+| H3      | prefisso quasi totale (regime caldo) | ~99% (CALIBRATE)|
+
+L'hit-rate REALIZZATO è misurato da inferscope (ADR-011), non assunto. I target
+sopra sono obiettivi di calibrazione del generatore, non valori imposti.
+
+## Asse secondario: stress di fallimento
+
+Condizione che replica la firma del fallimento agentico (Fig. 6 della fonte:
+i task falliti accumulano fino a 1.8× il contesto medio). Meccanismo: contesto
+che gonfia con observation di errore ripetute (append non-cached continuo),
+che erode l'hit-rate effettivo anche a prefisso condiviso. Punto in cui il
+decode-dominated si rompe e il prefill ritorna a mordere.
+
+| condizione | descrizione                                            |
+|------------|--------------------------------------------------------|
+| nominal    | traiettoria normale, append per-turno contenuto        |
+| failure    | loop di errore: append non-cached gonfio (~1.8× ctx)   |
+
+## Parametri del generatore — provenienza per-parametro
+
+Fonte = arXiv:2605.26297. Modello di riferimento: Qwen (questo esperimento usa
+Qwen2.5; il paper usa Qwen3.6-27B — divergenza dichiarata in PROVENANCE).
+
+| parametro                  | valore (Qwen, dalla fonte)         | figura |
+|----------------------------|------------------------------------|--------|
+| turni/task (thinking)      | mean ~12–41 per benchmark          | Fig. 3 |
+| turni/task (instant, SWE)  | mean 62.4, distrib. concentrata    | Fig. 3 |
+| contesto accumulato (SWE)  | mean 68.7K–80.1K, max 146K–166K    | Fig. 4 |
+| contesto (Terminal/GAIA)   | mean 52.5K–65.1K (Qwen)            | Fig. 4 |
+| output: thinking (Qwen T)  | 29.0–40.7% dell'output             | Fig. 5 |
+| output: tool-call (Qwen I) | 70.4–81.6% dell'output             | Fig. 5 |
+| tempo LLM vs tool          | LLM 71–98%, tool 2–29% (GAIA max)  | Fig. 7 |
+| Input/Output per turno     | ~120–560× (mean, workload-dep.)    | §5     |
+| Append/Output per turno    | ~3.6–6.1× mean, ~0.7–1.4× median   | §5     |
+| failure context inflation  | fino a 1.8× contesto medio         | Fig. 6 |
+
+### Assunzioni dichiarate (dove la fonte dà intervallo, non forma)
+
+- La FORMA della distribuzione interna a min/max/mean±std non è data dalla
+  fonte. ASSUNZIONE: campionamento entro [min,max] centrato su mean con spread
+  std (log-normale per le code lunghe dei turni; da fissare nel generatore).
+- La sequenza temporale read/explore→execute/write (Fig. del paper) è
+  qualitativa; ASSUNZIONE: non modellata nel generatore v1 (il segnale energia
+  dipende da cache/contesto, non dal tipo semantico di tool). Rivedibile.
+- Dimensione esatta delle observation per tipo di tool: non quantificata per
+  Qwen; ASSUNZIONE: derivata dal rapporto Append/Output, non per-tool.
+
+## Modelli
+
+- Qwen2.5 (taglia da fissare: 7B per sviluppo rapido / coerenza con gemelli;
+  taglia maggiore se serve realismo di contesto). DECIDERE prima del nodo.
+
+## Ripetizioni
+
+3 rep per cella (coerente con la serie).
+
+## Conteggio run
+
+`n_hitrate × n_failure × n_model × 3 rep`.
+Con 4 livelli hit × 2 condizioni × 1 modello × 3 rep = 24 run. Si chiude a
+livelli/modello fissati.
+
+## Metodologia di cattura
+
+inferscope NON modificato. Per ogni run: hit-rate realizzato (ADR-011), energia
+per-fase + divergenza dual-basis (ADR-012), su finestra che bracketta il
+traffico generato. Si preservano dalla serie: guard di troncamento finestra +
+`active_fraction` (vivono dentro il report inferscope).
+
+## Validazione pre-GPU (costo zero)
+
+Generatore + path di cattura sviluppati e validati su `llm-d-inference-sim`
+(CPU-only, KV-cache abilitato) su `optim-dev`. Obiettivo della validazione:
+(1) il generatore realizza i regimi di hit-rate target misurati via ADR-011;
+(2) il path di cattura produce record completi. Output in `sim-results/`.
+Solo dopo validazione in simulazione si passa al nodo GPU per la cattura energia.
+
+## Fuori scope
+
+Replica della caratterizzazione task del paper (accuratezza, success rate).
+Questo esperimento misura SOLO la firma energetica della forma di carico.
