@@ -29,6 +29,35 @@ L'hit-rate NON è un flag: è indotto dalla forma del traffico. Metodo:
   disabilitato; ogni turno ricomputa. Realizza il basso riuso.
 - **sweep**: livelli intermedi variando la frazione di prefisso condiviso.
 
+### Composizione del contesto: prefisso cacheable + storia accumulata
+
+Il contesto a regime (target 32-48K token) si compone di DUE componenti con
+ruoli distinti nell'hit-rate — modellati separatamente perché è così che il
+workload agentico reale è fatto (la fonte documenta che la quasi totalità
+dell'input è riusata, solo l'append per-turno è nuovo: Input/Output ≫
+Append/Output, §5):
+
+- **prefisso cacheable condiviso** (~15K token, fisso): system prompt +
+  tool-def. Artefatto deterministico versionato (`prefixes/agentic_system_v1`,
+  14785 token misurati col tokenizer Qwen2.5, seed 42, 40 tool). È la base
+  stabile, identica tra richieste → sempre cache-hit a regime caldo.
+- **storia accumulata** (variabile, porta il contesto fino al target): turni
+  precedenti, message, tool-call, observation. È la parte che CRESCE e di cui
+  si modula la condivisione per realizzare l'hit-rate.
+
+Realizzazione dei livelli in questa struttura:
+
+| livello | prefisso | storia                         | hit-rate effettivo |
+|---------|----------|--------------------------------|--------------------|
+| H2 caldo| condiviso| largamente condivisa           | ~90%+              |
+| H1 medio| condiviso| parzialmente disgiunta          | ~50%               |
+| H0 freddo| disgiunto/off | disgiunta o ricomputo     | ~0%                |
+
+La condizione **failure** opera su questa struttura: append di observation di
+errore UNICO e gonfio (1.8× contesto, Fig. 6) che fa crescere la quota
+non-cached della storia ed erode l'hit-rate effettivo anche col prefisso
+condiviso — la rottura misurabile del decode-dominated.
+
 Livelli hit-rate target (da calibrare/confermare sul simulatore, poi sul nodo):
 
 | livello | descrizione                          | hit-rate target |

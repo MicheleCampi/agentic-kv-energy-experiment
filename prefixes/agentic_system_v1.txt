@@ -1,0 +1,1515 @@
+You are an autonomous software engineering agent operating in a ReAct loop.
+At each step you reason about the current state, decide on an action, invoke one
+or more tools, observe the results, and continue until the task is complete.
+You have access to a filesystem, a shell, and a set of tools defined below.
+Always think step by step before acting. Prefer reading and exploring before
+writing or executing. Report progress concisely and stop when the goal is met.
+You must follow the project's conventions and never fabricate file contents you
+have not read. When a tool returns an error, diagnose before retrying.
+
+
+## Available tools
+
+{
+  "type": "function",
+  "function": {
+    "name": "read_file",
+    "description": "The read_file tool performs the read file operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "read_file_arg0": {
+          "type": "string",
+          "description": "Parameter 0 of the read_file tool. Provides the string value used to control how read_file operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "read_file_arg1": {
+          "type": "integer",
+          "description": "Parameter 1 of the read_file tool. Provides the integer value used to control how read_file operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "read_file_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "write_file",
+    "description": "The write_file tool performs the write file operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "write_file_arg0": {
+          "type": "object",
+          "description": "Parameter 0 of the write_file tool. Provides the object value used to control how write_file operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "write_file_arg1": {
+          "type": "array",
+          "description": "Parameter 1 of the write_file tool. Provides the array value used to control how write_file operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "write_file_arg0",
+        "write_file_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "edit_file",
+    "description": "The edit_file tool performs the edit file operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "edit_file_arg0": {
+          "type": "integer",
+          "description": "Parameter 0 of the edit_file tool. Provides the integer value used to control how edit_file operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "edit_file_arg1": {
+          "type": "object",
+          "description": "Parameter 1 of the edit_file tool. Provides the object value used to control how edit_file operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "edit_file_arg0",
+        "edit_file_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "bash",
+    "description": "The bash tool performs the bash operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "bash_arg0": {
+          "type": "object",
+          "description": "Parameter 0 of the bash tool. Provides the object value used to control how bash operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "bash_arg1": {
+          "type": "array",
+          "description": "Parameter 1 of the bash tool. Provides the array value used to control how bash operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "bash_arg2": {
+          "type": "string",
+          "description": "Parameter 2 of the bash tool. Provides the string value used to control how bash operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "bash_arg0",
+        "bash_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "grep_search",
+    "description": "The grep_search tool performs the grep search operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "grep_search_arg0": {
+          "type": "array",
+          "description": "Parameter 0 of the grep_search tool. Provides the array value used to control how grep_search operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "grep_search_arg1": {
+          "type": "integer",
+          "description": "Parameter 1 of the grep_search tool. Provides the integer value used to control how grep_search operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "grep_search_arg2": {
+          "type": "boolean",
+          "description": "Parameter 2 of the grep_search tool. Provides the boolean value used to control how grep_search operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "grep_search_arg0",
+        "grep_search_arg1",
+        "grep_search_arg2"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "glob_search",
+    "description": "The glob_search tool performs the glob search operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "glob_search_arg0": {
+          "type": "string",
+          "description": "Parameter 0 of the glob_search tool. Provides the string value used to control how glob_search operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "glob_search_arg1": {
+          "type": "boolean",
+          "description": "Parameter 1 of the glob_search tool. Provides the boolean value used to control how glob_search operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "glob_search_arg2": {
+          "type": "string",
+          "description": "Parameter 2 of the glob_search tool. Provides the string value used to control how glob_search operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "glob_search_arg3": {
+          "type": "object",
+          "description": "Parameter 3 of the glob_search tool. Provides the object value used to control how glob_search operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "glob_search_arg4": {
+          "type": "array",
+          "description": "Parameter 4 of the glob_search tool. Provides the array value used to control how glob_search operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "glob_search_arg0",
+        "glob_search_arg3",
+        "glob_search_arg4"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "list_directory",
+    "description": "The list_directory tool performs the list directory operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "list_directory_arg0": {
+          "type": "object",
+          "description": "Parameter 0 of the list_directory tool. Provides the object value used to control how list_directory operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "list_directory_arg1": {
+          "type": "boolean",
+          "description": "Parameter 1 of the list_directory tool. Provides the boolean value used to control how list_directory operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "list_directory_arg2": {
+          "type": "string",
+          "description": "Parameter 2 of the list_directory tool. Provides the string value used to control how list_directory operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "list_directory_arg3": {
+          "type": "integer",
+          "description": "Parameter 3 of the list_directory tool. Provides the integer value used to control how list_directory operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "list_directory_arg1",
+        "list_directory_arg2"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "run_tests",
+    "description": "The run_tests tool performs the run tests operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "run_tests_arg0": {
+          "type": "integer",
+          "description": "Parameter 0 of the run_tests tool. Provides the integer value used to control how run_tests operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "run_tests_arg1": {
+          "type": "array",
+          "description": "Parameter 1 of the run_tests tool. Provides the array value used to control how run_tests operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "run_tests_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "git_diff",
+    "description": "The git_diff tool performs the git diff operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "git_diff_arg0": {
+          "type": "integer",
+          "description": "Parameter 0 of the git_diff tool. Provides the integer value used to control how git_diff operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "git_diff_arg1": {
+          "type": "integer",
+          "description": "Parameter 1 of the git_diff tool. Provides the integer value used to control how git_diff operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "git_diff_arg2": {
+          "type": "string",
+          "description": "Parameter 2 of the git_diff tool. Provides the string value used to control how git_diff operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "git_diff_arg3": {
+          "type": "integer",
+          "description": "Parameter 3 of the git_diff tool. Provides the integer value used to control how git_diff operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "git_diff_arg0",
+        "git_diff_arg3"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "git_commit",
+    "description": "The git_commit tool performs the git commit operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "git_commit_arg0": {
+          "type": "integer",
+          "description": "Parameter 0 of the git_commit tool. Provides the integer value used to control how git_commit operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "git_commit_arg1": {
+          "type": "boolean",
+          "description": "Parameter 1 of the git_commit tool. Provides the boolean value used to control how git_commit operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "git_commit_arg2": {
+          "type": "object",
+          "description": "Parameter 2 of the git_commit tool. Provides the object value used to control how git_commit operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "git_commit_arg0",
+        "git_commit_arg2"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "web_fetch",
+    "description": "The web_fetch tool performs the web fetch operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "web_fetch_arg0": {
+          "type": "string",
+          "description": "Parameter 0 of the web_fetch tool. Provides the string value used to control how web_fetch operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "web_fetch_arg1": {
+          "type": "string",
+          "description": "Parameter 1 of the web_fetch tool. Provides the string value used to control how web_fetch operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "web_fetch_arg2": {
+          "type": "array",
+          "description": "Parameter 2 of the web_fetch tool. Provides the array value used to control how web_fetch operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "web_fetch_arg3": {
+          "type": "integer",
+          "description": "Parameter 3 of the web_fetch tool. Provides the integer value used to control how web_fetch operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "web_fetch_arg0",
+        "web_fetch_arg2"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "web_search",
+    "description": "The web_search tool performs the web search operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "web_search_arg0": {
+          "type": "boolean",
+          "description": "Parameter 0 of the web_search tool. Provides the boolean value used to control how web_search operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "web_search_arg1": {
+          "type": "array",
+          "description": "Parameter 1 of the web_search tool. Provides the array value used to control how web_search operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "web_search_arg2": {
+          "type": "array",
+          "description": "Parameter 2 of the web_search tool. Provides the array value used to control how web_search operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "web_search_arg3": {
+          "type": "integer",
+          "description": "Parameter 3 of the web_search tool. Provides the integer value used to control how web_search operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "web_search_arg4": {
+          "type": "object",
+          "description": "Parameter 4 of the web_search tool. Provides the object value used to control how web_search operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "web_search_arg5": {
+          "type": "object",
+          "description": "Parameter 5 of the web_search tool. Provides the object value used to control how web_search operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "web_search_arg0",
+        "web_search_arg1",
+        "web_search_arg2",
+        "web_search_arg3",
+        "web_search_arg4",
+        "web_search_arg5"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "launch_subagent",
+    "description": "The launch_subagent tool performs the launch subagent operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "launch_subagent_arg0": {
+          "type": "array",
+          "description": "Parameter 0 of the launch_subagent tool. Provides the array value used to control how launch_subagent operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "launch_subagent_arg1": {
+          "type": "integer",
+          "description": "Parameter 1 of the launch_subagent tool. Provides the integer value used to control how launch_subagent operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "launch_subagent_arg2": {
+          "type": "string",
+          "description": "Parameter 2 of the launch_subagent tool. Provides the string value used to control how launch_subagent operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "launch_subagent_arg3": {
+          "type": "string",
+          "description": "Parameter 3 of the launch_subagent tool. Provides the string value used to control how launch_subagent operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "launch_subagent_arg4": {
+          "type": "integer",
+          "description": "Parameter 4 of the launch_subagent tool. Provides the integer value used to control how launch_subagent operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "launch_subagent_arg5": {
+          "type": "array",
+          "description": "Parameter 5 of the launch_subagent tool. Provides the array value used to control how launch_subagent operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "launch_subagent_arg0",
+        "launch_subagent_arg1",
+        "launch_subagent_arg3",
+        "launch_subagent_arg5"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "task_output",
+    "description": "The task_output tool performs the task output operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "task_output_arg0": {
+          "type": "array",
+          "description": "Parameter 0 of the task_output tool. Provides the array value used to control how task_output operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "task_output_arg1": {
+          "type": "array",
+          "description": "Parameter 1 of the task_output tool. Provides the array value used to control how task_output operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "task_output_arg2": {
+          "type": "object",
+          "description": "Parameter 2 of the task_output tool. Provides the object value used to control how task_output operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "task_output_arg3": {
+          "type": "string",
+          "description": "Parameter 3 of the task_output tool. Provides the string value used to control how task_output operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "task_output_arg4": {
+          "type": "string",
+          "description": "Parameter 4 of the task_output tool. Provides the string value used to control how task_output operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "task_output_arg0",
+        "task_output_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "apply_patch",
+    "description": "The apply_patch tool performs the apply patch operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "apply_patch_arg0": {
+          "type": "boolean",
+          "description": "Parameter 0 of the apply_patch tool. Provides the boolean value used to control how apply_patch operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "apply_patch_arg1": {
+          "type": "boolean",
+          "description": "Parameter 1 of the apply_patch tool. Provides the boolean value used to control how apply_patch operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "apply_patch_arg2": {
+          "type": "array",
+          "description": "Parameter 2 of the apply_patch tool. Provides the array value used to control how apply_patch operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "apply_patch_arg3": {
+          "type": "string",
+          "description": "Parameter 3 of the apply_patch tool. Provides the string value used to control how apply_patch operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "apply_patch_arg4": {
+          "type": "boolean",
+          "description": "Parameter 4 of the apply_patch tool. Provides the boolean value used to control how apply_patch operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "apply_patch_arg5": {
+          "type": "integer",
+          "description": "Parameter 5 of the apply_patch tool. Provides the integer value used to control how apply_patch operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "apply_patch_arg1",
+        "apply_patch_arg2",
+        "apply_patch_arg5"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "delete_file",
+    "description": "The delete_file tool performs the delete file operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "delete_file_arg0": {
+          "type": "boolean",
+          "description": "Parameter 0 of the delete_file tool. Provides the boolean value used to control how delete_file operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "delete_file_arg1": {
+          "type": "object",
+          "description": "Parameter 1 of the delete_file tool. Provides the object value used to control how delete_file operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": []
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "move_file",
+    "description": "The move_file tool performs the move file operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "move_file_arg0": {
+          "type": "boolean",
+          "description": "Parameter 0 of the move_file tool. Provides the boolean value used to control how move_file operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "move_file_arg1": {
+          "type": "object",
+          "description": "Parameter 1 of the move_file tool. Provides the object value used to control how move_file operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "move_file_arg2": {
+          "type": "object",
+          "description": "Parameter 2 of the move_file tool. Provides the object value used to control how move_file operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": []
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "create_directory",
+    "description": "The create_directory tool performs the create directory operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "create_directory_arg0": {
+          "type": "boolean",
+          "description": "Parameter 0 of the create_directory tool. Provides the boolean value used to control how create_directory operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "create_directory_arg1": {
+          "type": "string",
+          "description": "Parameter 1 of the create_directory tool. Provides the string value used to control how create_directory operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "create_directory_arg2": {
+          "type": "boolean",
+          "description": "Parameter 2 of the create_directory tool. Provides the boolean value used to control how create_directory operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "create_directory_arg3": {
+          "type": "integer",
+          "description": "Parameter 3 of the create_directory tool. Provides the integer value used to control how create_directory operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "create_directory_arg4": {
+          "type": "string",
+          "description": "Parameter 4 of the create_directory tool. Provides the string value used to control how create_directory operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "create_directory_arg5": {
+          "type": "array",
+          "description": "Parameter 5 of the create_directory tool. Provides the array value used to control how create_directory operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "create_directory_arg0",
+        "create_directory_arg2",
+        "create_directory_arg4"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "read_logs",
+    "description": "The read_logs tool performs the read logs operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "read_logs_arg0": {
+          "type": "integer",
+          "description": "Parameter 0 of the read_logs tool. Provides the integer value used to control how read_logs operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "read_logs_arg1": {
+          "type": "array",
+          "description": "Parameter 1 of the read_logs tool. Provides the array value used to control how read_logs operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "read_logs_arg2": {
+          "type": "integer",
+          "description": "Parameter 2 of the read_logs tool. Provides the integer value used to control how read_logs operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "read_logs_arg3": {
+          "type": "object",
+          "description": "Parameter 3 of the read_logs tool. Provides the object value used to control how read_logs operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "read_logs_arg4": {
+          "type": "integer",
+          "description": "Parameter 4 of the read_logs tool. Provides the integer value used to control how read_logs operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "read_logs_arg5": {
+          "type": "integer",
+          "description": "Parameter 5 of the read_logs tool. Provides the integer value used to control how read_logs operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "read_logs_arg0",
+        "read_logs_arg2",
+        "read_logs_arg3"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "lint_check",
+    "description": "The lint_check tool performs the lint check operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "lint_check_arg0": {
+          "type": "boolean",
+          "description": "Parameter 0 of the lint_check tool. Provides the boolean value used to control how lint_check operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "lint_check_arg1": {
+          "type": "object",
+          "description": "Parameter 1 of the lint_check tool. Provides the object value used to control how lint_check operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "lint_check_arg2": {
+          "type": "integer",
+          "description": "Parameter 2 of the lint_check tool. Provides the integer value used to control how lint_check operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "lint_check_arg3": {
+          "type": "boolean",
+          "description": "Parameter 3 of the lint_check tool. Provides the boolean value used to control how lint_check operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "lint_check_arg4": {
+          "type": "object",
+          "description": "Parameter 4 of the lint_check tool. Provides the object value used to control how lint_check operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "lint_check_arg0",
+        "lint_check_arg1",
+        "lint_check_arg2",
+        "lint_check_arg3",
+        "lint_check_arg4"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "read_file_v1",
+    "description": "The read_file_v1 tool performs the read file v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "read_file_v1_arg0": {
+          "type": "string",
+          "description": "Parameter 0 of the read_file_v1 tool. Provides the string value used to control how read_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "read_file_v1_arg1": {
+          "type": "string",
+          "description": "Parameter 1 of the read_file_v1 tool. Provides the string value used to control how read_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "read_file_v1_arg2": {
+          "type": "string",
+          "description": "Parameter 2 of the read_file_v1 tool. Provides the string value used to control how read_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "read_file_v1_arg0",
+        "read_file_v1_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "write_file_v1",
+    "description": "The write_file_v1 tool performs the write file v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "write_file_v1_arg0": {
+          "type": "object",
+          "description": "Parameter 0 of the write_file_v1 tool. Provides the object value used to control how write_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "write_file_v1_arg1": {
+          "type": "array",
+          "description": "Parameter 1 of the write_file_v1 tool. Provides the array value used to control how write_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "write_file_v1_arg0",
+        "write_file_v1_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "edit_file_v1",
+    "description": "The edit_file_v1 tool performs the edit file v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "edit_file_v1_arg0": {
+          "type": "object",
+          "description": "Parameter 0 of the edit_file_v1 tool. Provides the object value used to control how edit_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "edit_file_v1_arg1": {
+          "type": "integer",
+          "description": "Parameter 1 of the edit_file_v1 tool. Provides the integer value used to control how edit_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "edit_file_v1_arg2": {
+          "type": "array",
+          "description": "Parameter 2 of the edit_file_v1 tool. Provides the array value used to control how edit_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "edit_file_v1_arg0",
+        "edit_file_v1_arg2"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "bash_v1",
+    "description": "The bash_v1 tool performs the bash v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "bash_v1_arg0": {
+          "type": "array",
+          "description": "Parameter 0 of the bash_v1 tool. Provides the array value used to control how bash_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "bash_v1_arg1": {
+          "type": "array",
+          "description": "Parameter 1 of the bash_v1 tool. Provides the array value used to control how bash_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "bash_v1_arg0",
+        "bash_v1_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "grep_search_v1",
+    "description": "The grep_search_v1 tool performs the grep search v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "grep_search_v1_arg0": {
+          "type": "string",
+          "description": "Parameter 0 of the grep_search_v1 tool. Provides the string value used to control how grep_search_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "grep_search_v1_arg1": {
+          "type": "boolean",
+          "description": "Parameter 1 of the grep_search_v1 tool. Provides the boolean value used to control how grep_search_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "grep_search_v1_arg0"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "glob_search_v1",
+    "description": "The glob_search_v1 tool performs the glob search v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "glob_search_v1_arg0": {
+          "type": "integer",
+          "description": "Parameter 0 of the glob_search_v1 tool. Provides the integer value used to control how glob_search_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "glob_search_v1_arg1": {
+          "type": "object",
+          "description": "Parameter 1 of the glob_search_v1 tool. Provides the object value used to control how glob_search_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "glob_search_v1_arg0",
+        "glob_search_v1_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "list_directory_v1",
+    "description": "The list_directory_v1 tool performs the list directory v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "list_directory_v1_arg0": {
+          "type": "integer",
+          "description": "Parameter 0 of the list_directory_v1 tool. Provides the integer value used to control how list_directory_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "list_directory_v1_arg1": {
+          "type": "integer",
+          "description": "Parameter 1 of the list_directory_v1 tool. Provides the integer value used to control how list_directory_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "list_directory_v1_arg2": {
+          "type": "string",
+          "description": "Parameter 2 of the list_directory_v1 tool. Provides the string value used to control how list_directory_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "list_directory_v1_arg3": {
+          "type": "object",
+          "description": "Parameter 3 of the list_directory_v1 tool. Provides the object value used to control how list_directory_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "list_directory_v1_arg4": {
+          "type": "object",
+          "description": "Parameter 4 of the list_directory_v1 tool. Provides the object value used to control how list_directory_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "list_directory_v1_arg0",
+        "list_directory_v1_arg2",
+        "list_directory_v1_arg3"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "run_tests_v1",
+    "description": "The run_tests_v1 tool performs the run tests v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "run_tests_v1_arg0": {
+          "type": "integer",
+          "description": "Parameter 0 of the run_tests_v1 tool. Provides the integer value used to control how run_tests_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "run_tests_v1_arg1": {
+          "type": "array",
+          "description": "Parameter 1 of the run_tests_v1 tool. Provides the array value used to control how run_tests_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "run_tests_v1_arg0",
+        "run_tests_v1_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "git_diff_v1",
+    "description": "The git_diff_v1 tool performs the git diff v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "git_diff_v1_arg0": {
+          "type": "string",
+          "description": "Parameter 0 of the git_diff_v1 tool. Provides the string value used to control how git_diff_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "git_diff_v1_arg1": {
+          "type": "string",
+          "description": "Parameter 1 of the git_diff_v1 tool. Provides the string value used to control how git_diff_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "git_diff_v1_arg2": {
+          "type": "boolean",
+          "description": "Parameter 2 of the git_diff_v1 tool. Provides the boolean value used to control how git_diff_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "git_diff_v1_arg3": {
+          "type": "array",
+          "description": "Parameter 3 of the git_diff_v1 tool. Provides the array value used to control how git_diff_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "git_diff_v1_arg4": {
+          "type": "object",
+          "description": "Parameter 4 of the git_diff_v1 tool. Provides the object value used to control how git_diff_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "git_diff_v1_arg0",
+        "git_diff_v1_arg3"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "git_commit_v1",
+    "description": "The git_commit_v1 tool performs the git commit v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "git_commit_v1_arg0": {
+          "type": "integer",
+          "description": "Parameter 0 of the git_commit_v1 tool. Provides the integer value used to control how git_commit_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "git_commit_v1_arg1": {
+          "type": "integer",
+          "description": "Parameter 1 of the git_commit_v1 tool. Provides the integer value used to control how git_commit_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "git_commit_v1_arg2": {
+          "type": "object",
+          "description": "Parameter 2 of the git_commit_v1 tool. Provides the object value used to control how git_commit_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "git_commit_v1_arg3": {
+          "type": "string",
+          "description": "Parameter 3 of the git_commit_v1 tool. Provides the string value used to control how git_commit_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "git_commit_v1_arg4": {
+          "type": "string",
+          "description": "Parameter 4 of the git_commit_v1 tool. Provides the string value used to control how git_commit_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "git_commit_v1_arg0",
+        "git_commit_v1_arg4"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "web_fetch_v1",
+    "description": "The web_fetch_v1 tool performs the web fetch v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "web_fetch_v1_arg0": {
+          "type": "object",
+          "description": "Parameter 0 of the web_fetch_v1 tool. Provides the object value used to control how web_fetch_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "web_fetch_v1_arg1": {
+          "type": "object",
+          "description": "Parameter 1 of the web_fetch_v1 tool. Provides the object value used to control how web_fetch_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "web_fetch_v1_arg2": {
+          "type": "object",
+          "description": "Parameter 2 of the web_fetch_v1 tool. Provides the object value used to control how web_fetch_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "web_fetch_v1_arg3": {
+          "type": "integer",
+          "description": "Parameter 3 of the web_fetch_v1 tool. Provides the integer value used to control how web_fetch_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "web_fetch_v1_arg4": {
+          "type": "string",
+          "description": "Parameter 4 of the web_fetch_v1 tool. Provides the string value used to control how web_fetch_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "web_fetch_v1_arg1",
+        "web_fetch_v1_arg2",
+        "web_fetch_v1_arg3"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "web_search_v1",
+    "description": "The web_search_v1 tool performs the web search v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "web_search_v1_arg0": {
+          "type": "array",
+          "description": "Parameter 0 of the web_search_v1 tool. Provides the array value used to control how web_search_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "web_search_v1_arg1": {
+          "type": "object",
+          "description": "Parameter 1 of the web_search_v1 tool. Provides the object value used to control how web_search_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "web_search_v1_arg2": {
+          "type": "object",
+          "description": "Parameter 2 of the web_search_v1 tool. Provides the object value used to control how web_search_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "web_search_v1_arg0",
+        "web_search_v1_arg1",
+        "web_search_v1_arg2"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "launch_subagent_v1",
+    "description": "The launch_subagent_v1 tool performs the launch subagent v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "launch_subagent_v1_arg0": {
+          "type": "array",
+          "description": "Parameter 0 of the launch_subagent_v1 tool. Provides the array value used to control how launch_subagent_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "launch_subagent_v1_arg1": {
+          "type": "object",
+          "description": "Parameter 1 of the launch_subagent_v1 tool. Provides the object value used to control how launch_subagent_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "launch_subagent_v1_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "task_output_v1",
+    "description": "The task_output_v1 tool performs the task output v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "task_output_v1_arg0": {
+          "type": "integer",
+          "description": "Parameter 0 of the task_output_v1 tool. Provides the integer value used to control how task_output_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "task_output_v1_arg1": {
+          "type": "boolean",
+          "description": "Parameter 1 of the task_output_v1 tool. Provides the boolean value used to control how task_output_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "task_output_v1_arg2": {
+          "type": "array",
+          "description": "Parameter 2 of the task_output_v1 tool. Provides the array value used to control how task_output_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "task_output_v1_arg3": {
+          "type": "boolean",
+          "description": "Parameter 3 of the task_output_v1 tool. Provides the boolean value used to control how task_output_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "task_output_v1_arg1",
+        "task_output_v1_arg2",
+        "task_output_v1_arg3"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "apply_patch_v1",
+    "description": "The apply_patch_v1 tool performs the apply patch v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "apply_patch_v1_arg0": {
+          "type": "string",
+          "description": "Parameter 0 of the apply_patch_v1 tool. Provides the string value used to control how apply_patch_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "apply_patch_v1_arg1": {
+          "type": "object",
+          "description": "Parameter 1 of the apply_patch_v1 tool. Provides the object value used to control how apply_patch_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "apply_patch_v1_arg0"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "delete_file_v1",
+    "description": "The delete_file_v1 tool performs the delete file v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "delete_file_v1_arg0": {
+          "type": "object",
+          "description": "Parameter 0 of the delete_file_v1 tool. Provides the object value used to control how delete_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "delete_file_v1_arg1": {
+          "type": "boolean",
+          "description": "Parameter 1 of the delete_file_v1 tool. Provides the boolean value used to control how delete_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "delete_file_v1_arg0",
+        "delete_file_v1_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "move_file_v1",
+    "description": "The move_file_v1 tool performs the move file v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "move_file_v1_arg0": {
+          "type": "string",
+          "description": "Parameter 0 of the move_file_v1 tool. Provides the string value used to control how move_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "move_file_v1_arg1": {
+          "type": "boolean",
+          "description": "Parameter 1 of the move_file_v1 tool. Provides the boolean value used to control how move_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "move_file_v1_arg2": {
+          "type": "array",
+          "description": "Parameter 2 of the move_file_v1 tool. Provides the array value used to control how move_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "move_file_v1_arg3": {
+          "type": "boolean",
+          "description": "Parameter 3 of the move_file_v1 tool. Provides the boolean value used to control how move_file_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "move_file_v1_arg1"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "create_directory_v1",
+    "description": "The create_directory_v1 tool performs the create directory v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "create_directory_v1_arg0": {
+          "type": "string",
+          "description": "Parameter 0 of the create_directory_v1 tool. Provides the string value used to control how create_directory_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "create_directory_v1_arg1": {
+          "type": "object",
+          "description": "Parameter 1 of the create_directory_v1 tool. Provides the object value used to control how create_directory_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "properties": {
+            "key": {
+              "type": "string"
+            }
+          }
+        },
+        "create_directory_v1_arg2": {
+          "type": "string",
+          "description": "Parameter 2 of the create_directory_v1 tool. Provides the string value used to control how create_directory_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "create_directory_v1_arg3": {
+          "type": "integer",
+          "description": "Parameter 3 of the create_directory_v1 tool. Provides the integer value used to control how create_directory_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "create_directory_v1_arg4": {
+          "type": "string",
+          "description": "Parameter 4 of the create_directory_v1 tool. Provides the string value used to control how create_directory_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "create_directory_v1_arg5": {
+          "type": "integer",
+          "description": "Parameter 5 of the create_directory_v1 tool. Provides the integer value used to control how create_directory_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "create_directory_v1_arg1",
+        "create_directory_v1_arg3",
+        "create_directory_v1_arg5"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "read_logs_v1",
+    "description": "The read_logs_v1 tool performs the read logs v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "read_logs_v1_arg0": {
+          "type": "integer",
+          "description": "Parameter 0 of the read_logs_v1 tool. Provides the integer value used to control how read_logs_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "read_logs_v1_arg1": {
+          "type": "integer",
+          "description": "Parameter 1 of the read_logs_v1 tool. Provides the integer value used to control how read_logs_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "read_logs_v1_arg2": {
+          "type": "boolean",
+          "description": "Parameter 2 of the read_logs_v1 tool. Provides the boolean value used to control how read_logs_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "read_logs_v1_arg3": {
+          "type": "boolean",
+          "description": "Parameter 3 of the read_logs_v1 tool. Provides the boolean value used to control how read_logs_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "read_logs_v1_arg4": {
+          "type": "string",
+          "description": "Parameter 4 of the read_logs_v1 tool. Provides the string value used to control how read_logs_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "read_logs_v1_arg5": {
+          "type": "array",
+          "description": "Parameter 5 of the read_logs_v1 tool. Provides the array value used to control how read_logs_v1 operates on the target. Must be supplied when the agent invokes this tool in a step.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "read_logs_v1_arg2",
+        "read_logs_v1_arg4"
+      ]
+    }
+  }
+}
+
+{
+  "type": "function",
+  "function": {
+    "name": "lint_check_v1",
+    "description": "The lint_check_v1 tool performs the lint check v1 operation within the agent's execution environment. Use it during the act phase of the ReAct loop. It returns an observation appended to the conversation context.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "lint_check_v1_arg0": {
+          "type": "string",
+          "description": "Parameter 0 of the lint_check_v1 tool. Provides the string value used to control how lint_check_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        },
+        "lint_check_v1_arg1": {
+          "type": "integer",
+          "description": "Parameter 1 of the lint_check_v1 tool. Provides the integer value used to control how lint_check_v1 operates on the target. Must be supplied when the agent invokes this tool in a step."
+        }
+      },
+      "required": [
+        "lint_check_v1_arg0"
+      ]
+    }
+  }
+}
+

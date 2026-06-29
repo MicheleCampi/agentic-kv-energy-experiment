@@ -1,0 +1,8 @@
+{
+  "version": "v1",
+  "tokenizer": "Qwen/Qwen2.5-0.5B-Instruct",
+  "seed": 42,
+  "n_tools": 40,
+  "char_len": 65436,
+  "token_count": 14785
+}
