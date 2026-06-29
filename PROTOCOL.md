@@ -35,8 +35,12 @@ Livelli hit-rate target (da calibrare/confermare sul simulatore, poi sul nodo):
 |---------|--------------------------------------|-----------------|
 | H0      | cache fredda / disabilitata          | ~0% (CALIBRATE) |
 | H1      | prefisso parzialmente condiviso      | ~50% (CALIBRATE)|
-| H2      | prefisso largamente condiviso        | ~85% (CALIBRATE)|
-| H3      | prefisso quasi totale (regime caldo) | ~99% (CALIBRATE)|
+| H2      | prefisso largamente condiviso        | ~90%+ (CALIBRATE)|
+
+3 livelli (estremi + centro) per individuare il ginocchio della curva
+tokens/joule vs hit-rate con spesa-nodo minima. Campionamento adattivo: se la
+calibrazione (sim) mostra il ginocchio cadere tra due livelli, si infittisce
+UN quarto livello mirato lì — non una griglia a 4 punti a priori.
 
 L'hit-rate REALIZZATO è misurato da inferscope (ADR-011), non assunto. I target
 sopra sono obiettivi di calibrazione del generatore, non valori imposti.
@@ -85,8 +89,13 @@ Qwen2.5; il paper usa Qwen3.6-27B — divergenza dichiarata in PROVENANCE).
 
 ## Modelli
 
-- Qwen2.5 (taglia da fissare: 7B per sviluppo rapido / coerenza con gemelli;
-  taglia maggiore se serve realismo di contesto). DECIDERE prima del nodo.
+- **Qwen2.5-32B** (fissato). Razionale: realismo del regime agentico (contesti
+  52-80K nel paper richiedono una taglia credibile), stessa famiglia del paper
+  (Qwen), coerenza con i gemelli cuda-graphs/chunk-size che già girano 32B.
+- **Target contesto operativo: ~32-48K token** (dentro il range del paper, sotto
+  i massimi 146-166K che farebbero esplodere i tempi di run). Scelta esplicita
+  per stare nel budget-nodo (3-5h), non limite nascosto. `max_model_len`
+  dimensionato di conseguenza, da confermare sul nodo.
 
 ## Ripetizioni
 
@@ -95,7 +104,9 @@ Qwen2.5; il paper usa Qwen3.6-27B — divergenza dichiarata in PROVENANCE).
 ## Conteggio run
 
 `n_hitrate × n_failure × n_model × 3 rep`.
-Con 4 livelli hit × 2 condizioni × 1 modello × 3 rep = 24 run. Si chiude a
+Con 3 livelli hit × 2 condizioni × 1 modello × 3 rep = 18 run base
+(+3 se si aggiunge il quarto livello adattivo = 21). Stima nodo: 3-5h su
+Qwen2.5-32B / H100 PCIe. Si chiude a
 livelli/modello fissati.
 
 ## Metodologia di cattura
