@@ -117,3 +117,16 @@ Solo dopo validazione in simulazione si passa al nodo GPU per la cattura energia
 
 Replica della caratterizzazione task del paper (accuratezza, success rate).
 Questo esperimento misura SOLO la firma energetica della forma di carico.
+
+## Nota di validazione (verificata sul sim, 2026-06-29)
+
+Confine accertato di ciò che `llm-d-inference-sim` v0.8.2 può validare:
+- **Valida** l'asse hit-rate: espone `vllm:prefix_cache_hits` e
+  `vllm:prefix_cache_queries` (counter) → hit-rate via window-delta (ADR-011).
+  Riscontro concreto: fixture esistente mostra che 12 completion con prefisso
+  lungo condiviso producono hit_rate=0.490 misurato. Il meccanismo dell'asse
+  primario è già osservato funzionare su questo sim.
+- **NON valida** l'asse energia: il sim è CPU-only, non espone energia NVML né
+  separazione prefill/decode time. tokens/joule e divergenza dual-basis si
+  misurano SOLO sul nodo GPU. La fase sim prova che il generatore realizza i
+  regimi di hit-rate target; non prova nulla sulla firma energetica.
