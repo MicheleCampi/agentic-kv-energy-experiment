@@ -87,6 +87,26 @@ Qwen2.5; il paper usa Qwen3.6-27B — divergenza dichiarata in PROVENANCE).
 - Dimensione esatta delle observation per tipo di tool: non quantificata per
   Qwen; ASSUNZIONE: derivata dal rapporto Append/Output, non per-tool.
 
+## Natura del workload: replay deterministico, non agente reale
+
+Il generatore NON anima un vero agente LLM. Emette un **replay deterministico e
+seeded** di una forma di traffico parametrizzata sulle distribuzioni della fonte
+(turni, contesto, composizione, rapporto cache/append). Questa è una scelta
+consapevole, non una semplificazione di comodo:
+
+- **Razionale**: un agente reale è non-deterministico (stesso task → traiettorie
+  diverse, come la fonte stessa nota). Quel non-determinismo distruggerebbe la
+  riproducibilità della misura energetica. Un esperimento di caratterizzazione
+  di sistema richiede una forma di carico riproducibile, non viva.
+- **Cosa si misura**: la firma energetica della FORMA DI CARICO (rapporto
+  cache/ricomputo, profondità contesto, ripartizione fase), ancorata token-per-
+  token a distribuzioni misurate pubblicate — non il comportamento semantico
+  dell'agente.
+- **Limite dichiarato**: un revisore può obiettare "non è traffico agentico
+  vero". La risposta è sopra — è la firma della forma, non dell'agente. Questo
+  limite è esplicito, non nascosto. Lo stesso approccio dei benchmark di serving
+  standard (es. `vllm bench serve` replica una distribuzione, non lancia agenti).
+
 ## Modelli
 
 - **Qwen2.5-32B** (fissato). Razionale: realismo del regime agentico (contesti
@@ -115,6 +135,23 @@ inferscope NON modificato. Per ogni run: hit-rate realizzato (ADR-011), energia
 per-fase + divergenza dual-basis (ADR-012), su finestra che bracketta il
 traffico generato. Si preservano dalla serie: guard di troncamento finestra +
 `active_fraction` (vivono dentro il report inferscope).
+
+### Manifest per-run (riproducibilità da terzi)
+
+Il generatore emette, per ogni run, un manifest machine-readable accanto al
+report inferscope. Contenuto minimo:
+- hit-rate **target** (livello H*) vs hit-rate **realizzato** (misurato ADR-011)
+- token-count del prefisso condiviso (dal tokenizer Qwen2.5)
+- profondità di contesto raggiunta (token)
+- condizione (nominal/failure), rep
+- **seed RNG** (la run è ribattibile bit-per-bit)
+- parametri di campionamento usati (turni, append, composizione)
+
+Insieme allo snapshot di provenance per-run, il manifest rende l'esperimento
+riproducibile da un terzo: dichiara esattamente quale carico è stato generato,
+con quale seme, e quanto il realizzato si discosta dal target. La separazione
+target-vs-realizzato è onestà sperimentale di prima classe: non si assume che il
+generatore abbia centrato il regime, lo si misura e si registra lo scarto.
 
 ## Validazione pre-GPU (costo zero)
 
