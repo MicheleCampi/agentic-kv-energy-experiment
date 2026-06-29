@@ -1,0 +1,8 @@
+{
+  "version": "sim",
+  "tokenizer": "Qwen/Qwen2.5-0.5B-Instruct",
+  "seed": 42,
+  "n_tools": 1,
+  "char_len": 1613,
+  "token_count": 352
+}
