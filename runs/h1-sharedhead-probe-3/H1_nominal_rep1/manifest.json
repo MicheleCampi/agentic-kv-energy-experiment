@@ -1,0 +1,29 @@
+{
+  "regime": "H1",
+  "condition": "nominal",
+  "rep": 1,
+  "seed": 20260752,
+  "prefix_version": "v1",
+  "prefix_tokens": 14785,
+  "target_context_tokens": 32768,
+  "n_sessions": 20,
+  "turns_generated": 326,
+  "history_tokens_final": 18456,
+  "requests_sent": 20,
+  "hitrate_target": "H1",
+  "hitrate_realized": 0.530292664386165,
+  "prefix_cache_hits_delta": 286016,
+  "prefix_cache_queries_delta": 539355,
+  "sampling_params": {
+    "turns_mean": 31,
+    "turns_std": 20,
+    "turns_min": 6,
+    "turns_max": 65,
+    "append_out_ratio_mean": 4.8,
+    "output_tokens_mean": 180,
+    "output_tokens_std": 90,
+    "failure_inflation": 1.8
+  },
+  "error": null,
+  "hitrate_scrape": "per-pod sum (prefill+decode), orchestrator"
+}

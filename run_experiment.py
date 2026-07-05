@@ -53,6 +53,13 @@ def scrape_pods_prefix_counters(context):
     return hits, queries
 
 
+# Index maps for multi-axis seed derivation (prime-weighted, so no
+# (nonce, regime, condition, rep) tuples collide; the old additive form
+# seed_base+rep+nonce collided across campaigns: 20260709+3 == 20260710+2).
+REGIME_IDX = {"H0": 0, "H1": 1, "H2": 2}
+COND_IDX = {"nominal": 0, "failure": 1}
+
+
 def run_cell(args, regime, condition, rep):
     cell = f"{regime}_{condition}_rep{rep}"
     cell_dir = Path(args.out_dir) / cell
@@ -68,7 +75,11 @@ def run_cell(args, regime, condition, rep):
         "--regime", regime,
         "--condition", condition,
         "--rep", str(rep),
-        "--seed", str(args.seed_base + rep + args.run_nonce),
+        "--seed", str(args.seed_base
+                      + args.run_nonce * 1000003
+                      + REGIME_IDX[regime] * 10007
+                      + COND_IDX[condition] * 101
+                      + rep),
         "--prefix-version", args.prefix_version,
         "--target-context", str(args.target_context),
         "--n-sessions", str(args.n_sessions),

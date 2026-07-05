@@ -195,34 +195,62 @@ Solo dopo validazione in simulazione si passa al nodo GPU per la cattura energia
 Replica della caratterizzazione task del paper (accuratezza, success rate).
 Questo esperimento misura SOLO la firma energetica della forma di carico.
 
-## Nota di validazione — confine di calibrazione H1 (2026-07-05)
+## Calibrazione H1 — storia completa (chiusa 2026-07-05)
+Tre root cause verificate in sequenza, ciascuna fino alla riga di sorgente,
+con predizione quantitativa dove possibile.
 
-Con scrape per-pod (somma prefill+decode) e run isolate via nonce, il sim
-realizza: H0=0.000 (esatto, prefisso disgiunto — niente knob engine per H0),
-H2=0.915, monotonia confermata. MA il pavimento con prefisso condiviso è
-~0.85 ANCHE a storia interamente unica (history_shared_frac=0.0). ROOT CAUSE
-(2026-07-05, verificata quantitativamente dal sorgente v0.8.2): artefatto di
-scala tra il budget del generatore e il tokenizer del sim. Catena: (1) il
-generatore dimensiona la storia in chars/4 (calibrato su BPE reale); (2) il
-sim usa SimpleTokenizer (pkg/tokenizer/tokenizer.go: regex word-level con
-`\w+` che ingloba gli underscore + hash FNV) -> l'unita' di filler
-`UNIQ_s3_b7_obs_xxxx` = 1 token-sim, la storia si comprime ~6x nello
-spazio-token del sim mentre il prefisso (testo naturale) no; (3) la
-proporzione vista dal sim diventa ~81% prefisso / 19% storia -> pavimento
-teorico 0.812; (4) residuo +2.5pt: i counter Prometheus del sim sono
-alimentati da membership any-position dei blocchi (startRequest), NON dal
-conteggio prefix-truncated (countCachedBlockPrefix, usato solo per lo score
-interno) — divergenza semantica dal vLLM reale, secondaria con hash
-incatenati. PREDIZIONE VERIFICATA: quota-prefisso replicando il regex del sim
-sul prompt della floor probe = 0.812 vs 0.837 misurato. CONSEGUENZA: il
-pavimento e' compensabile (filler a unita' granulari -> token-sim separati),
-quindi H1 torna calibrabile sul sim; in ogni caso il realizzato su vLLM reale
-resta la coordinata pubblicata. Ipotesi intermedia "filler ripetitivo /
-contabilita' content-addressed" falsificata da esperimento di controllo prima
-della root cause. Nota storica sotto: CONSEGUENZA: il sim valida il MECCANISMO (monotonia,
-estremi, pipeline) ma NON la posizione di H1, che si calibra sul vLLM reale
-con un check economico a inizio sessione GPU (2-3 run corte prima della
-matrice). history_shared_frac resta al valore di design 0.5.
+**1. Artefatto di scala del tokenizer** (pavimento ~0.84 con storia
+interamente unica). Il generatore dimensiona in chars/4 (BPE reale); il sim
+usa SimpleTokenizer (pkg/tokenizer/tokenizer.go, regex word-level: `\w+`
+ingloba underscore) -> l'unita' `UNIQ_s3_b7_obs_xxxx` = 1 token-sim, storia
+compressa ~6x nello spazio-token sim, prefisso no -> quota-prefisso ~0.81 =
+pavimento. Predizione verificata: 0.812 vs 0.837 misurato (+2.5pt: counter
+Prometheus alimentati da membership any-position via startRequest, non dal
+prefix-truncated countCachedBlockPrefix — divergenza semantica dal vLLM
+reale, secondaria). Ipotesi intermedia "contabilita' content-addressed su
+filler ripetitivo" falsificata da esperimento di controllo prima della root
+cause. FIX: filler granulare — 1 parola hex da 3 chars senza underscore =
+1 token-sim = ~1 token BPE, sizing e conteggio coincidono per costruzione.
+Floor probe post-fix (frac=0.0, prefisso condiviso): 0.448/0.476 —
+quota-prefisso pura ~0.46, predizione ~0.45 confermata.
+
+**2. Knob interleaved concettualmente rotto sotto hashing a catena.** Il sim
+delega a llm-d-kv-cache prefixHashes (pkg/kvcache/kvblock/
+token_processor.go:130-134): `prefix = hash(prefix, chunk)` — l'hash di ogni
+blocco incorpora la catena dei precedenti. Un blocco shared mid-history
+preceduto da blocchi unique divergenti ha hash diverso in ogni sessione: la
+condivisibilita' mid-history NON ESISTE, a qualunque frac (il draw Bernoulli
+per-turn del design originale non poteva funzionare). vLLM reale usa lo
+stesso schema di hashing cumulativo: il ridisegno vale identicamente per il
+GPU run. FIX: shared-HEAD design — history_shared_frac = frazione del
+budget-token di storia coperta da una testa condivisa CONTIGUA al prefisso
+(primi turni identici cross-session per costruzione, poi divergenza;
+semanticamente piu' fedele a traiettorie agentiche con bootstrap comune).
+Troncamento token-preciso dell'ultimo blocco shared al budget residuo:
+senza, la testa e' quantizzata a blocchi interi (massa fissa 1449 tok,
+insensibile al frac nell'intervallo ~0.03-0.09, misurato). Residuo di
+quantizzazione post-fix: le ~4 righe template per blocco (~15 tok), non
+clampate.
+
+**3. Collisione della derivazione seed additiva.** seed_base+rep+nonce
+collide per qualunque coppia (nonce, rep) a somma uguale: scoperta da un
+realizzato identico a 16 cifre cross-campagna (nonce 20260709 rep3 ==
+20260710 rep2 -> prompt identici al bit, realizzato inquinato dalla cache
+warm). FIX: derivazione multi-asse prime-weighted
+(nonce*1000003 + regime_idx*10007 + cond_idx*101 + rep), nessuna tupla
+collide. Evidenza della collisione conservata in runs/matrix-recal-confirm.
+
+**Valori congelati e matrice di conferma** (runs/matrix-recal-full, nonce
+20260711, 18/18): H1 history_shared_frac=0.065. H0=0.000 esatto 6/6 (prefissi
+disgiunti reggono anche col filler granulare); H1 nominal 0.484-0.518 (media
+0.505), failure 0.471-0.502 (media 0.488); H2 nominal ~0.940, failure ~0.922.
+Monotonia ovunque; failure < nominal in H1/H2 (la massa unique bloated dei
+blocchi failure diluisce i hit — direzione fisicamente attesa). La varianza
+per-sessione della frazione shared (sessioni corte da clamp turns_min pesano
+la testa fissa fino a ~3x) e' proprieta' accettata del disegno: il regime e'
+definito dalla media di campagna, che e' cio' che i counter aggregano.
+La coordinata pubblicata resta il realizzato su vLLM reale, calibrato con
+2-3 run corte a inizio sessione GPU prima della matrice.
 
 ## Nota di validazione (verificata sul sim, 2026-06-29)
 

@@ -47,7 +47,7 @@ SHADE = {
 REGIMES = {
     # fraction of history SHARED across sessions -> induces hit-rate
     "H0": {"history_shared_frac": 0.0, "prefix_shared": False},
-    "H1": {"history_shared_frac": 0.5, "prefix_shared": True},
+    "H1": {"history_shared_frac": 0.065, "prefix_shared": True},
     "H2": {"history_shared_frac": 0.95, "prefix_shared": True},
 }
 
@@ -89,7 +89,8 @@ def approx_tokens(text: str) -> int:
 
 def make_history_block(rng: random.Random, shade: dict, shared: bool,
                        failure: bool, block_idx: int, sess: int,
-                       base_seed: int) -> str:
+                       base_seed: int,
+                       max_toks: int | None = None) -> str:
     """One turn's appended block: message + tool-call + observation."""
     # Shared blocks must be IDENTICAL across sessions at the same turn:
     # length and content both derive from a per-position rng. Unique blocks
@@ -103,13 +104,19 @@ def make_history_block(rng: random.Random, shade: dict, shared: bool,
     # Shared blocks reuse a fixed tag (cacheable across sessions); unique blocks
     # carry a session-specific nonce so they cannot be prefix-cache-shared.
     tag = "SHARED" if shared else f"UNIQ_s{sess}_b{block_idx}"
-    filler_units = max(1, append_toks // 6)
-    # High-entropy filler: repetitive token patterns inflate hit accounting
-    # on content-addressed counters (and are unrealistic for agent
-    # observations anyway). Drawn from block_rng: deterministic per position
-    # for shared blocks, per-session stream for unique blocks.
-    body = " ".join(f"{tag}_obs_{block_rng.getrandbits(32):08x}"
-                    for _ in range(filler_units))
+    filler_units = max(1, append_toks)
+    if max_toks is not None:
+        # Truncate to the remaining shared-head budget (granular filler:
+        # 1 word = 1 sim token = ~1 BPE token, so the cut is token-precise).
+        filler_units = max(1, min(filler_units, max_toks))
+    # Granular filler: one short underscore-free hex word per intended token,
+    # so sim word-level tokenization and chars/4 sizing agree by construction
+    # (word + space = 4 chars, ~1 BPE token on real models too). Uniqueness of
+    # UNIQ blocks comes from the rng stream itself (session-sequential,
+    # nonce-seeded seed); the tag survives once at the head of the body for
+    # debuggability (single sim token, negligible).
+    body = tag + " " + " ".join(f"{block_rng.getrandbits(12):03x}"
+                                for _ in range(filler_units))
     return (f"\n## Turn {block_idx}\n"
             f"Thinking: analyzing state at step {block_idx}.\n"
             f"Tool call: read_file(path=module_{block_idx}.py)\n"
@@ -128,13 +135,24 @@ def build_session_prompt(prefix: str, rng: random.Random, shade: dict,
     turn = 0
     base = prefix if regime_cfg["prefix_shared"] else (
         f"SESSION_UNIQUE_PREFIX_{rng.random()}\n" + prefix)
+    # Shared-HEAD design (not interleaved): chained block hashing (vLLM and
+    # llm-d-kv-cache prefixHashes alike) makes a shared block unreachable if
+    # any preceding block diverges, so only a contiguous head of the history
+    # can be cross-session cacheable. history_shared_frac is therefore the
+    # fraction of the history token budget covered by the shared head.
+    prefix_toks = approx_tokens(base)
+    history_budget = max(0, target_ctx_tokens - prefix_toks)
+    shared_head_toks = regime_cfg["history_shared_frac"] * history_budget
     while turn < n_turns:
-        shared = rng.random() < regime_cfg["history_shared_frac"]
+        hist_toks = approx_tokens("".join(history))
+        shared = hist_toks < shared_head_toks
+        head_left = int(shared_head_toks - hist_toks) if shared else None
         history.append(make_history_block(rng, shade, shared,
                                           condition == "failure", turn,
-                                          sess, base_seed))
+                                          sess, base_seed,
+                                          max_toks=head_left))
         turn += 1
-        if approx_tokens(base + "".join(history)) >= target_ctx_tokens:
+        if prefix_toks + approx_tokens("".join(history)) >= target_ctx_tokens:
             break
     return base + "".join(history), turn
 
