@@ -88,18 +88,28 @@ def approx_tokens(text: str) -> int:
 
 
 def make_history_block(rng: random.Random, shade: dict, shared: bool,
-                       failure: bool, block_idx: int) -> str:
+                       failure: bool, block_idx: int, sess: int,
+                       base_seed: int) -> str:
     """One turn's appended block: message + tool-call + observation."""
-    out_toks = max(16, int(rng.gauss(shade["output_tokens_mean"],
-                                     shade["output_tokens_std"])))
+    # Shared blocks must be IDENTICAL across sessions at the same turn:
+    # length and content both derive from a per-position rng. Unique blocks
+    # draw from the session's sequential rng and carry a session nonce.
+    block_rng = random.Random(base_seed * 1000003 + block_idx) if shared else rng
+    out_toks = max(16, int(block_rng.gauss(shade["output_tokens_mean"],
+                                           shade["output_tokens_std"])))
     append_toks = int(out_toks * shade["append_out_ratio_mean"])
     if failure:
         append_toks = int(append_toks * shade["failure_inflation"])
     # Shared blocks reuse a fixed tag (cacheable across sessions); unique blocks
     # carry a session-specific nonce so they cannot be prefix-cache-shared.
-    tag = "SHARED" if shared else f"UNIQ{block_idx}"
+    tag = "SHARED" if shared else f"UNIQ_s{sess}_b{block_idx}"
     filler_units = max(1, append_toks // 6)
-    body = " ".join(f"{tag}_obs_token_{i}" for i in range(filler_units))
+    # High-entropy filler: repetitive token patterns inflate hit accounting
+    # on content-addressed counters (and are unrealistic for agent
+    # observations anyway). Drawn from block_rng: deterministic per position
+    # for shared blocks, per-session stream for unique blocks.
+    body = " ".join(f"{tag}_obs_{block_rng.getrandbits(32):08x}"
+                    for _ in range(filler_units))
     return (f"\n## Turn {block_idx}\n"
             f"Thinking: analyzing state at step {block_idx}.\n"
             f"Tool call: read_file(path=module_{block_idx}.py)\n"
@@ -108,7 +118,8 @@ def make_history_block(rng: random.Random, shade: dict, shared: bool,
 
 def build_session_prompt(prefix: str, rng: random.Random, shade: dict,
                          regime_cfg: dict, condition: str,
-                         target_ctx_tokens: int) -> tuple[str, int]:
+                         target_ctx_tokens: int, sess: int,
+                         base_seed: int) -> tuple[str, int]:
     """Grow history until prefix+history reaches target context. Returns
     (full_prompt, turns)."""
     n_turns = int(rng.gauss(shade["turns_mean"], shade["turns_std"]))
@@ -120,7 +131,8 @@ def build_session_prompt(prefix: str, rng: random.Random, shade: dict,
     while turn < n_turns:
         shared = rng.random() < regime_cfg["history_shared_frac"]
         history.append(make_history_block(rng, shade, shared,
-                                          condition == "failure", turn))
+                                          condition == "failure", turn,
+                                          sess, base_seed))
         turn += 1
         if approx_tokens(base + "".join(history)) >= target_ctx_tokens:
             break
@@ -173,7 +185,8 @@ def run(args) -> RunManifest:
     try:
         for sess in range(args.n_sessions):
             prompt, turns = build_session_prompt(
-                prefix, rng, SHADE, regime_cfg, args.condition, args.target_context)
+                prefix, rng, SHADE, regime_cfg, args.condition,
+                args.target_context, sess, args.seed)
             total_turns += turns
             final_hist_tokens = approx_tokens(prompt) - prefix_tokens
             # Replay each turn as a re-send of prefix+history-so-far. Here we send

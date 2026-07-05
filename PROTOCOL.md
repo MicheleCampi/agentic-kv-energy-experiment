@@ -195,6 +195,20 @@ Solo dopo validazione in simulazione si passa al nodo GPU per la cattura energia
 Replica della caratterizzazione task del paper (accuratezza, success rate).
 Questo esperimento misura SOLO la firma energetica della forma di carico.
 
+## Nota di validazione — confine di calibrazione H1 (2026-07-05)
+
+Con scrape per-pod (somma prefill+decode) e run isolate via nonce, il sim
+realizza: H0=0.000 (esatto, prefisso disgiunto — niente knob engine per H0),
+H2=0.915, monotonia confermata. MA il pavimento con prefisso condiviso è
+~0.85 ANCHE a storia interamente unica (history_shared_frac=0.0). Ipotesi
+"filler ripetitivo" FALSIFICATA con esperimento di controllo (filler ad alta
+entropia, rng 32-bit per token: pavimento invariato a 0.837) — il pavimento è
+della contabilità hit del sim v0.8.2, non della forma del nostro traffico; il
+meccanismo interno del sim non è caratterizzato oltre, perché non necessario: CONSEGUENZA: il sim valida il MECCANISMO (monotonia,
+estremi, pipeline) ma NON la posizione di H1, che si calibra sul vLLM reale
+con un check economico a inizio sessione GPU (2-3 run corte prima della
+matrice). history_shared_frac resta al valore di design 0.5.
+
 ## Nota di validazione (verificata sul sim, 2026-06-29)
 
 Confine accertato di ciò che `llm-d-inference-sim` v0.8.2 può validare:
