@@ -200,11 +200,26 @@ Questo esperimento misura SOLO la firma energetica della forma di carico.
 Con scrape per-pod (somma prefill+decode) e run isolate via nonce, il sim
 realizza: H0=0.000 (esatto, prefisso disgiunto — niente knob engine per H0),
 H2=0.915, monotonia confermata. MA il pavimento con prefisso condiviso è
-~0.85 ANCHE a storia interamente unica (history_shared_frac=0.0). Ipotesi
-"filler ripetitivo" FALSIFICATA con esperimento di controllo (filler ad alta
-entropia, rng 32-bit per token: pavimento invariato a 0.837) — il pavimento è
-della contabilità hit del sim v0.8.2, non della forma del nostro traffico; il
-meccanismo interno del sim non è caratterizzato oltre, perché non necessario: CONSEGUENZA: il sim valida il MECCANISMO (monotonia,
+~0.85 ANCHE a storia interamente unica (history_shared_frac=0.0). ROOT CAUSE
+(2026-07-05, verificata quantitativamente dal sorgente v0.8.2): artefatto di
+scala tra il budget del generatore e il tokenizer del sim. Catena: (1) il
+generatore dimensiona la storia in chars/4 (calibrato su BPE reale); (2) il
+sim usa SimpleTokenizer (pkg/tokenizer/tokenizer.go: regex word-level con
+`\w+` che ingloba gli underscore + hash FNV) -> l'unita' di filler
+`UNIQ_s3_b7_obs_xxxx` = 1 token-sim, la storia si comprime ~6x nello
+spazio-token del sim mentre il prefisso (testo naturale) no; (3) la
+proporzione vista dal sim diventa ~81% prefisso / 19% storia -> pavimento
+teorico 0.812; (4) residuo +2.5pt: i counter Prometheus del sim sono
+alimentati da membership any-position dei blocchi (startRequest), NON dal
+conteggio prefix-truncated (countCachedBlockPrefix, usato solo per lo score
+interno) — divergenza semantica dal vLLM reale, secondaria con hash
+incatenati. PREDIZIONE VERIFICATA: quota-prefisso replicando il regex del sim
+sul prompt della floor probe = 0.812 vs 0.837 misurato. CONSEGUENZA: il
+pavimento e' compensabile (filler a unita' granulari -> token-sim separati),
+quindi H1 torna calibrabile sul sim; in ogni caso il realizzato su vLLM reale
+resta la coordinata pubblicata. Ipotesi intermedia "filler ripetitivo /
+contabilita' content-addressed" falsificata da esperimento di controllo prima
+della root cause. Nota storica sotto: CONSEGUENZA: il sim valida il MECCANISMO (monotonia,
 estremi, pipeline) ma NON la posizione di H1, che si calibra sul vLLM reale
 con un check economico a inizio sessione GPU (2-3 run corte prima della
 matrice). history_shared_frac resta al valore di design 0.5.
