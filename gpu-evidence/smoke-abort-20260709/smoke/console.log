@@ -1,0 +1,5 @@
+[gpu ] engine launched pid=3261, waiting ready (timeout 900s)
+[gpu ] EngineCore pid=3378, window=300s
+[run ] H0_nominal_rep1
+[done] H0_nominal_rep1 in 1s — hit target=H0 realized=None
+index -> /home/ubuntu/exp-results/smoke/index.json

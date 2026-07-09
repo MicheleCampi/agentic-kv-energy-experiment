@@ -189,6 +189,11 @@ def run_cell(args, regime, condition, rep, scrape, gpu_ctx=None):
         "--n-sessions", str(args.n_sessions),
         "--out", str(manifest),
     ]
+    if gpu_ctx is not None:
+        # GPU mode: history growth counted with the real tokenizer of the
+        # served model; the engine enforces prompt+max_tokens <= max_model_len
+        # (smoke 2026-07-09: word-proxy undercounted hex filler ~3.37x -> 400).
+        cmd.append("--bpe-counter")
     # hit-rate is measured by the orchestrator (sim: per-pod sum; GPU:
     # local single-engine /metrics); generator --measure-hitrate NOT used.
     print(f"[run ] {cell}")

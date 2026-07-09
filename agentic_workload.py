@@ -126,7 +126,8 @@ def make_history_block(rng: random.Random, shade: dict, shared: bool,
 def build_session_prompt(prefix: str, rng: random.Random, shade: dict,
                          regime_cfg: dict, condition: str,
                          target_ctx_tokens: int, sess: int,
-                         base_seed: int) -> tuple[str, int]:
+                         base_seed: int,
+                         count_tokens=approx_tokens) -> tuple[str, int]:
     """Grow history until prefix+history reaches target context. Returns
     (full_prompt, turns)."""
     n_turns = int(rng.gauss(shade["turns_mean"], shade["turns_std"]))
@@ -140,20 +141,52 @@ def build_session_prompt(prefix: str, rng: random.Random, shade: dict,
     # any preceding block diverges, so only a contiguous head of the history
     # can be cross-session cacheable. history_shared_frac is therefore the
     # fraction of the history token budget covered by the shared head.
-    prefix_toks = approx_tokens(base)
+    prefix_toks = count_tokens(base)
     history_budget = max(0, target_ctx_tokens - prefix_toks)
     shared_head_toks = regime_cfg["history_shared_frac"] * history_budget
+    hist_toks = 0  # incremental: each block counted once with the injected counter
     while turn < n_turns:
-        hist_toks = approx_tokens("".join(history))
         shared = hist_toks < shared_head_toks
         head_left = int(shared_head_toks - hist_toks) if shared else None
-        history.append(make_history_block(rng, shade, shared,
-                                          condition == "failure", turn,
-                                          sess, base_seed,
-                                          max_toks=head_left))
-        turn += 1
-        if prefix_toks + approx_tokens("".join(history)) >= target_ctx_tokens:
+        block = make_history_block(rng, shade, shared,
+                                   condition == "failure", turn,
+                                   sess, base_seed,
+                                   max_toks=head_left)
+        block_toks = count_tokens(block)
+        if shared and block_toks > head_left:
+            # Injected-counter trim: word-level max_toks is exact for the sim
+            # counter but undercuts BPE (~3.37 tok/word measured). Bisect on
+            # filler words against count_tokens: deterministic given (content,
+            # budget, counter), hence identical across sessions at the same
+            # position. If even the skeleton + 1 word exceeds the remaining
+            # head budget, the block degrades to UNIQUE: the shared head ends
+            # where the budget ends (no partial-shared hybrids -- a truncated
+            # variant would never block-hash-match across sessions anyway).
+            lines = block.rsplit("Observation: ", 1)
+            words = lines[1].split(" ")
+            lo, hi = 1, len(words)          # words[0] is the tag, keep >=1 filler
+            while lo < hi:
+                mid = (lo + hi + 1) // 2
+                cand = lines[0] + "Observation: " + " ".join(words[:mid]) + "\n"
+                if count_tokens(cand) <= head_left:
+                    lo = mid
+                else:
+                    hi = mid - 1
+            cand = lines[0] + "Observation: " + " ".join(words[:lo]) + "\n"
+            if lo >= 2 and count_tokens(cand) <= head_left:
+                block, block_toks = cand, count_tokens(cand)
+            else:
+                shared = False
+                block = make_history_block(rng, shade, False,
+                                           condition == "failure", turn,
+                                           sess, base_seed, max_toks=None)
+                block_toks = count_tokens(block)
+        # Pre-append stop: never exceed target (the engine rejects, not warns).
+        if prefix_toks + hist_toks + block_toks > target_ctx_tokens:
             break
+        history.append(block)
+        hist_toks += block_toks
+        turn += 1
     return base + "".join(history), turn
 
 
@@ -179,10 +212,23 @@ def send_completion(endpoint: str, model: str, prompt: str, max_tokens: int):
         return json.loads(r.read())
 
 
+OUTPUT_HEADROOM_MARGIN = 64  # special/template tokens the raw encode does not see
+
+
 def run(args) -> RunManifest:
     prefix, prefix_tokens = load_prefix(args.prefix_version)
     regime_cfg = REGIMES[args.regime]
     rng = random.Random(args.seed)
+    if args.bpe_counter:
+        from transformers import AutoTokenizer
+        _tok = AutoTokenizer.from_pretrained(args.model)
+        count_tokens = lambda t: len(_tok.encode(t, add_special_tokens=False))
+    else:
+        count_tokens = approx_tokens
+    # The engine enforces prompt + max_tokens <= max_model_len (400 otherwise,
+    # verified on vllm 0.23.0 smoke 2026-07-09). Build against a target that
+    # leaves room for the request output plus a small fixed margin.
+    effective_target = args.target_context - args.max_tokens - OUTPUT_HEADROOM_MARGIN
     man = RunManifest(
         regime=args.regime, condition=args.condition, rep=args.rep,
         seed=args.seed, prefix_version=args.prefix_version,
@@ -204,7 +250,8 @@ def run(args) -> RunManifest:
         for sess in range(args.n_sessions):
             prompt, turns = build_session_prompt(
                 prefix, rng, SHADE, regime_cfg, args.condition,
-                args.target_context, sess, args.seed)
+                effective_target, sess, args.seed,
+                count_tokens=count_tokens)
             total_turns += turns
             final_hist_tokens = approx_tokens(prompt) - prefix_tokens
             # Replay each turn as a re-send of prefix+history-so-far. Here we send
@@ -252,6 +299,10 @@ def main():
     ap.add_argument("--target-context", type=int, default=40000)
     ap.add_argument("--n-sessions", type=int, default=12)
     ap.add_argument("--max-tokens", type=int, default=128)
+    ap.add_argument("--bpe-counter", action="store_true",
+                    help="count tokens with the real HF tokenizer of --model "
+                         "during history growth (GPU mode); default keeps the "
+                         "sim word-level proxy (approx_tokens)")
     ap.add_argument("--per-turn", action="store_true",
                     help="send one request per turn (heavier; default: one/session)")
     ap.add_argument("--measure-hitrate", action="store_true",
