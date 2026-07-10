@@ -75,6 +75,17 @@ valore si cambia a nodo acceso.
 - [ ] Verifica sul LATO optim-dev: count file + size totale combaciano
 - [ ] Commit dalla VM, mai dal nodo
 
+## 5b. Script di sessione (OBBLIGATORI — mai comandi a mano)
+- Fasi 2-4 SOLO via `10-smoke.sh` / `20-calib.sh` / `30-matrix.sh <secs>`:
+  tutti i parametri scritti (rehearsal 2026-07-10: 3 lanci su 4 composti a
+  memoria erano sbagliati). `30-matrix.sh` rifiuta di partire senza il
+  sample-secs dimensionato dalla calibrazione.
+- Non-regressione sim pre-sessione (da optim-dev, nodo spento), parametri
+  SCRITTI: `--sim --model facebook/opt-125m --regimes H0,H1,H2 --reps 1
+  --n-sessions 8 --target-context 32768 --prefix-version v1` — attesi
+  H0=0.0 esatto, H1 in [0.40,0.60], H2>0.90, monotonia stretta.
+  (prefix sim o target ridotti = composizione degenere, regime falsato)
+
 ## 6. Teardown
 - [ ] stop_engine (già in finally, verificare processo morto)
 - [ ] Nodo spento SOLO dopo verifica rsync lato optim-dev

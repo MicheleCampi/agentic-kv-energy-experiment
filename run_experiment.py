@@ -327,6 +327,13 @@ def main():
                          "campaign otherwise pollutes realized hit-rate)")
     args = ap.parse_args()
 
+    # F14: an external SIGTERM (timeout(1), tmux kill-session, node agent)
+    # kills CPython WITHOUT running finally -> stop_engine never fires and
+    # the engine (own session, killpg-only reachable) leaks: on a GPU node
+    # that is ~60GB of VRAM held and the next bind failing. Convert TERM
+    # into SystemExit so the existing finally tears the engine down.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+
     engine_proc = None
     gpu_ctx = None
     if args.sim:
