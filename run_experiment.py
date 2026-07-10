@@ -113,14 +113,27 @@ def launch_engine(args):
     return proc, cmd
 
 
-def wait_ready(endpoint, timeout_s):
+def wait_ready(endpoint, timeout_s, expect_model=None):
+    """Ready when /health is 200 AND, if expect_model is given, /v1/models
+    lists it. F11 (rehearsal 2026-07-10): a stale listener on the port
+    (zombie engine, forgotten port-forward) answered /health for a process
+    that was NOT ours — cells would then talk to an engine inferscope is
+    not monitoring (energy attributed to an idle PID)."""
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         try:
             with urllib.request.urlopen(endpoint + GPU_READY_PATH,
                                         timeout=5) as r:
-                if r.status == 200:
-                    return True
+                if r.status != 200:
+                    raise OSError("health != 200")
+            if expect_model is not None:
+                with urllib.request.urlopen(endpoint + "/v1/models",
+                                            timeout=5) as r:
+                    ids = [m.get("id") for m in
+                           json.loads(r.read()).get("data", [])]
+                if expect_model not in ids:
+                    raise OSError(f"identity mismatch: {ids}")
+            return True
         except Exception:
             pass
         time.sleep(2)
@@ -347,7 +360,8 @@ def main():
         engine_proc, engine_cmd = launch_engine(args)
         print(f"[gpu ] engine launched pid={engine_proc.pid}, waiting ready "
               f"(timeout {args.ready_timeout}s)")
-        if not wait_ready(args.endpoint, args.ready_timeout):
+        if not wait_ready(args.endpoint, args.ready_timeout,
+                          expect_model=args.model):
             stop_engine(engine_proc)
             sys.exit(f"engine not ready in {args.ready_timeout}s, "
                      f"see {out_dir}/engine.log")
@@ -393,7 +407,14 @@ def main():
         # filler ~3.37x -> prompt past max_model_len -> HTTP 400).
         warm_ns.target_context = 1000
         warm_ns.out_dir = str(Path(args.out_dir) / "warmup")
-        print("[gpu ] warm-up cell (discarded, prefix cache warming)")
+        # F12: the warm-up must NOT be resume-safe. Its purpose is tied to
+        # THIS engine start (cold prefix); a resumed campaign restarts the
+        # engine, so a skipped warm-up re-creates the first-cell artefact
+        # on the first resumed cell (verified in rehearsal 2026-07-10).
+        import shutil as _sh
+        _sh.rmtree(warm_ns.out_dir, ignore_errors=True)
+        print("[warm] warm-up cell (discarded, prefix cache warming — "
+              "re-run at EVERY engine start, never resumed)")
         wm = run_cell(warm_ns, "H1", "nominal", 1, scrape, gpu_ctx=None)
         wman = Path(warm_ns.out_dir) / "H1_nominal_rep1" / "manifest.json"
         if wman.exists():
