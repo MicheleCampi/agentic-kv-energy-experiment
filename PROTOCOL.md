@@ -264,3 +264,14 @@ Confine accertato di ciò che `llm-d-inference-sim` v0.8.2 può validare:
   separazione prefill/decode time. tokens/joule e divergenza dual-basis si
   misurano SOLO sul nodo GPU. La fase sim prova che il generatore realizza i
   regimi di hit-rate target; non prova nulla sulla firma energetica.
+
+## Confini di validita' della conferma sim
+La matrice 18/18 in sim valida il GENERATORE (calibrazione hit-rate,
+determinismo, trim bisezione), NON la topologia di esecuzione GPU. Fuori
+copertura sim, verificati solo a nodo acceso o per audit statico:
+- engine unico persistente tra celle (effetto d'ordine prima-cella:
+  prefix freddo una volta per avvio — mitigato con warm-up cell)
+- ramo inferscope (contratto CLI, feature set del binario, NVML)
+- rete a runtime (HF Hub per pesi e tokenizer)
+- semantica --sample-secs (timer fisso, costo idle per cella)
+Ogni claim "validato in sim" implica SOLO la prima categoria.

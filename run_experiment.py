@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -96,7 +97,11 @@ def launch_engine(args):
     restart between cells (H0 isolation via seed-disjoint prefixes).
     --enforce-eager is hardcoded: matrix invariant per PROTOCOL."""
     port = urllib.parse.urlsplit(args.endpoint).port or 8000
-    cmd = ["vllm", "serve", args.model,
+    vllm_bin = shutil.which("vllm") or str(Path(sys.executable).parent / "vllm")
+    if not Path(vllm_bin).exists():
+        sys.exit(f"vllm binary not found (PATH and {Path(sys.executable).parent}); "
+                 "activate the venv or fix PATH")
+    cmd = [vllm_bin, "serve", args.model,
            "--port", str(port),
            "--enforce-eager"]
     cmd += shlex.split(args.engine_args)
@@ -215,12 +220,18 @@ def run_cell(args, regime, condition, rep, scrape, gpu_ctx=None):
             # attach -> per-phase energy alongside whole-window energy.
             "--metrics-endpoint", args.metrics_url,
             "--model", args.model,
+            "--json",
         ]
         infer_proc = subprocess.Popen(infer_cmd, stdout=subprocess.PIPE,
                                       stderr=subprocess.PIPE, text=True)
         time.sleep(ATTACH_OFFSET_S)
     gen_t0 = time.time()
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    gen_env = dict(os.environ)
+    if gpu_ctx is not None:
+        # F2: tokenizer strictly from local cache (warmed by the engine
+        # download); no hub round-trips mid-matrix (anonymous rate limits).
+        gen_env["HF_HUB_OFFLINE"] = "1"
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=gen_env)
     gen_wall = time.time() - gen_t0
     (cell_dir / "generator.log").write_text(proc.stdout + proc.stderr)
     infer_ok = False
@@ -314,6 +325,25 @@ def main():
         scrape = lambda: scrape_local_prefix_counters(args.metrics_url)
         out_dir = Path(args.out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
+        # F9: contract check BEFORE paying engine readiness. The binary
+        # identity is version+commit+FEATURES: a build without gpu-nvidia
+        # hides --gpu and NVML never runs (silent zero-energy campaign,
+        # root-caused 2026-07-10).
+        hp = subprocess.run([args.inferscope_bin, "--help"],
+                            capture_output=True, text=True)
+        if hp.returncode != 0 or "--gpu" not in hp.stdout:
+            sys.exit("inferscope contract check FAILED: --gpu absent from "
+                     "--help (binary built without gpu-nvidia feature?). "
+                     "Rebuild: cargo build --release --features gpu-nvidia")
+        probe = subprocess.run(
+            [args.inferscope_bin, "--sample-only", "--pid", str(os.getpid()),
+             "--duration-secs", "1", "--json"],
+            capture_output=True, text=True)
+        try:
+            json.loads(probe.stdout)
+        except Exception:
+            sys.exit("inferscope contract check FAILED: dummy --sample-only "
+                     "did not emit parseable JSON on stdout")
         engine_proc, engine_cmd = launch_engine(args)
         print(f"[gpu ] engine launched pid={engine_proc.pid}, waiting ready "
               f"(timeout {args.ready_timeout}s)")
@@ -335,6 +365,8 @@ def main():
             "api_pid": engine_proc.pid,
             "engine_core_pid": engine_pid,
             "sample_secs": args.sample_secs,
+            "seed_base": args.seed_base,
+            "run_nonce": args.run_nonce,
             "pip_freeze": "pip-freeze.txt",
         }, indent=2))
         gpu_ctx = {
@@ -343,6 +375,35 @@ def main():
             "sample_secs": args.sample_secs,
         }
         print(f"[gpu ] EngineCore pid={engine_pid}, window={args.sample_secs}s")
+        # Warm-up cell (root cause 2026-07-10): the FIRST request after
+        # engine start misses the whole system prefix (14,785 tok for v1)
+        # exactly once; the engine persists across cells, so the first
+        # measured cell is depressed by ~prefix/queries (~0.06 on H1
+        # calibration, enough to trip any sane divergence gate). Warm the
+        # prefix with a short discarded cell BEFORE anything measured.
+        # Reserved nonce offset keeps its prompts seed-disjoint from every
+        # real cell of this and other campaigns.
+        warm_ns = argparse.Namespace(**vars(args))
+        warm_ns.run_nonce = args.run_nonce + 900001
+        warm_ns.n_sessions = 2
+        # target below the prefix size -> history_budget = 0 -> the warm-up
+        # sends the bare prefix (verbatim, counter-independent). Growing
+        # history here with the approx counter against the real engine
+        # would rebuild the 2026-07-09 overflow (approx undercounts the
+        # filler ~3.37x -> prompt past max_model_len -> HTTP 400).
+        warm_ns.target_context = 1000
+        warm_ns.out_dir = str(Path(args.out_dir) / "warmup")
+        print("[gpu ] warm-up cell (discarded, prefix cache warming)")
+        wm = run_cell(warm_ns, "H1", "nominal", 1, scrape, gpu_ctx=None)
+        wman = Path(warm_ns.out_dir) / "H1_nominal_rep1" / "manifest.json"
+        if wman.exists():
+            wj = json.loads(wman.read_text())
+            wj["discarded"] = True
+            wj["purpose"] = "prefix cache warm-up, excluded from all statistics"
+            wman.write_text(json.dumps(wj, indent=2))
+        if wm.get("error"):
+            stop_engine(engine_proc)
+            sys.exit(f"warm-up cell failed: {wm['error']} — aborting before matrix")
 
     try:
         summary = []

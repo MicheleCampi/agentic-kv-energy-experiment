@@ -65,6 +65,8 @@ class RunManifest:
     # filled after run:
     turns_generated: int = 0
     history_tokens_final: int = 0
+    sessions_growth_stopped: int = 0   # sessions that hit effective target
+    max_session_tokens: int = 0        # longest prompt, in INJECTED counter units (BPE on GPU)
     requests_sent: int = 0
     hitrate_target: str = ""
     hitrate_realized: float | None = None      # from Prometheus delta (sim)
@@ -134,6 +136,7 @@ def build_session_prompt(prefix: str, rng: random.Random, shade: dict,
     n_turns = max(shade["turns_min"], min(shade["turns_max"], n_turns))
     history = []
     turn = 0
+    growth_stopped = False  # set iff the pre-append stop fires (vs turn exhaustion)
     base = prefix if regime_cfg["prefix_shared"] else (
         f"SESSION_UNIQUE_PREFIX_{rng.random()}\n" + prefix)
     # Shared-HEAD design (not interleaved): chained block hashing (vLLM and
@@ -183,11 +186,12 @@ def build_session_prompt(prefix: str, rng: random.Random, shade: dict,
                 block_toks = count_tokens(block)
         # Pre-append stop: never exceed target (the engine rejects, not warns).
         if prefix_toks + hist_toks + block_toks > target_ctx_tokens:
+            growth_stopped = True
             break
         history.append(block)
         hist_toks += block_toks
         turn += 1
-    return base + "".join(history), turn
+    return base + "".join(history), turn, growth_stopped, prefix_toks + hist_toks
 
 
 def scrape_prefix_metrics(metrics_url: str) -> tuple[int, int]:
@@ -248,11 +252,14 @@ def run(args) -> RunManifest:
     final_hist_tokens = 0
     try:
         for sess in range(args.n_sessions):
-            prompt, turns = build_session_prompt(
+            prompt, turns, gstopped, sess_toks = build_session_prompt(
                 prefix, rng, SHADE, regime_cfg, args.condition,
                 effective_target, sess, args.seed,
                 count_tokens=count_tokens)
             total_turns += turns
+            if gstopped:
+                man.sessions_growth_stopped += 1
+            man.max_session_tokens = max(man.max_session_tokens, sess_toks)
             final_hist_tokens = approx_tokens(prompt) - prefix_tokens
             # Replay each turn as a re-send of prefix+history-so-far. Here we send
             # the full grown prompt once per session as the representative request;

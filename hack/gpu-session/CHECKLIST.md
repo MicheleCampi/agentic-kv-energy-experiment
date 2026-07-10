@@ -14,6 +14,11 @@ valore si cambia a nodo acceso.
 - [ ] `python3 agentic_workload.py --help | grep bpe-counter` presente
       (guardia: rsync di una working copy pre-fix = 400 garantito al primo
       prompt, vedi smoke-abort-20260709)
+- [ ] Contratto inferscope sul binario TRASFERITO (identita' = versione +
+      commit + FEATURES, root cause 2026-07-10: build senza gpu-nvidia
+      nasconde --gpu e NVML non parte mai — campagna a zero energia):
+      `~/inferscope-bin/inferscope --help | grep -q '\-\-gpu' && echo FEAT_OK`
+      (l'orchestrator ha lo stesso check fail-fast prima del launch engine)
 - [ ] rsync repo + inferscope binary da optim-dev
       (`-e "ssh -i ~/.ssh/runpod_optimdev"`; MAI git clone sul nodo)
 - [ ] venv bare, `pip install vllm==0.23.0`
@@ -30,6 +35,10 @@ valore si cambia a nodo acceso.
       `--engine-args`), probe `/health`
 - [ ] EngineCore PID trovato via `pgrep -g <pgid> -f VLLM::EngineCore`
       (attach all'APIServer = GPU idle, artefatto noto da cuda-graphs)
+- [ ] Warm-up cell post-readiness (automatica nell'orchestrator, dir
+      warmup/, discarded): scalda il prefix di sistema — la PRIMA richiesta
+      dopo l'avvio engine lo manca per intero (~0.06 di depressione sulla
+      prima cella misurata, root cause 2026-07-10). Vale a OGNI avvio engine.
 - [ ] Lo smoke DEVE includere una cella che costruisce fino a effective
       target: verifica accettazione al limite del contesto (HTTP 400 = bug
       di budgeting, non crash: causa propria, root cause a freddo)
@@ -42,8 +51,9 @@ valore si cambia a nodo acceso.
 - [ ] 3 run corte: `--regimes H1 --reps $EXP_CALIB_REPS --n-sessions $EXP_CALIB_N_SESSIONS`
 - [ ] Annotare wall-time per run -> dimensionare `--sample-secs` per regime
       (finestra > wall-time generatore + margine; warning manifest se >90%)
-- [ ] Go/no-go sulla MEDIANA (criteri in 00-env.sh):
-      verde [0.40,0.60] -> matrice | giallo -> UNA run adattiva | rosso -> abort
+- [ ] Go/no-go ESEGUIBILE: `python3 hack/gpu-session/gonogo.py <calib-dir>`
+      (exit 0 verde / 2 giallo / 1 rosso; formula spread = max-min > 0.04.
+      MAI valutazione a occhio dei criteri a nodo acceso)
 - [ ] Divergenza intra-calibrazione > +-0.04 -> ROSSO anche con mediana verde
 - [ ] Se run adattiva: nuovo `history_shared_frac` in provenance come
       deviazione documentata dal frozen sim
@@ -68,3 +78,10 @@ valore si cambia a nodo acceso.
 ## 6. Teardown
 - [ ] stop_engine (già in finally, verificare processo morto)
 - [ ] Nodo spento SOLO dopo verifica rsync lato optim-dev
+
+## Regola trasversale — anomalie spiegate
+Ogni anomalia osservata e spiegata (anche se derubricata come benigna)
+OBBLIGA alla domanda scritta prima di procedere: "questo meccanismo dove
+altro agisce nelle fasi successive?" — risposta annotata nel log di
+sessione. (Il cold-start visto nello smoke H2 del 2026-07-10 spiegava
+gia' il rosso di calibrazione un'ora prima che accadesse.)
