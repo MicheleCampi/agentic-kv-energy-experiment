@@ -1,0 +1,5 @@
+error: unexpected argument '--gpu' found
+
+Usage: inferscope <--endpoint <ENDPOINT>|--model <MODEL>|--prompt <PROMPT>|--max-tokens <MAX_TOKENS>|--pid <PID>|--sample-period-ms <SAMPLE_PERIOD_MS>|--metrics-endpoint <METRICS_ENDPOINT>|--metrics-period-ms <METRICS_PERIOD_MS>|--include-descendants|--sample-only|--duration-secs <DURATION_SECS>|--json>
+
+For more information, try '--help'.

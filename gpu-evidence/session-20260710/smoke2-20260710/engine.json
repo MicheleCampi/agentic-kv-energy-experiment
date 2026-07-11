@@ -1,0 +1,14 @@
+{
+  "engine_cmd": [
+    "vllm",
+    "serve",
+    "Qwen/Qwen2.5-32B-Instruct",
+    "--port",
+    "8000",
+    "--enforce-eager"
+  ],
+  "api_pid": 4807,
+  "engine_core_pid": 4869,
+  "sample_secs": 600,
+  "pip_freeze": "pip-freeze.txt"
+}

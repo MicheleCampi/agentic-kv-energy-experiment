@@ -99,3 +99,12 @@ OBBLIGA alla domanda scritta prima di procedere: "questo meccanismo dove
 altro agisce nelle fasi successive?" — risposta annotata nel log di
 sessione. (Il cold-start visto nello smoke H2 del 2026-07-10 spiegava
 gia' il rosso di calibrazione un'ora prima che accadesse.)
+## Backlog strumentazione
+- F15: fail-fast del generatore su endpoint morto (connection refused =
+  abort immediato, niente fail silenzioso). Annotato in sessione 2026-07-10.
+- F16: inferscope — persistere la serie per-sample di potenza (o energia
+  cumulativa per-sample nella phase_timeline). Oggi il JSON espone solo
+  aggregati per-device: impossibile attribuire l'energia alla sola finestra
+  attiva del generatore (wall 35-65s dentro finestra fissa 120s). Con la
+  serie, tok/J active-window esatto invece del solo bound conservativo
+  window-based. Emerso in analisi matrice 2026-07-11.

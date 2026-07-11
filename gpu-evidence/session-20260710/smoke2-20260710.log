@@ -1,0 +1,5 @@
+[gpu ] engine launched pid=4807, waiting ready (timeout 900s)
+[gpu ] EngineCore pid=4869, window=600s
+[run ] H2_nominal_rep1
+[done] H2_nominal_rep1 in 16s — hit target=H2 realized=0.4997474747474748
+index -> /home/ubuntu/exp-results/smoke2-20260710/index.json

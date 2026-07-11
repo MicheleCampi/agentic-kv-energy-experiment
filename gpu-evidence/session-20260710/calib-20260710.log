@@ -1,0 +1,9 @@
+[gpu ] engine launched pid=5381, waiting ready (timeout 900s)
+[gpu ] EngineCore pid=5445, window=600s
+[run ] H1_nominal_rep1
+[done] H1_nominal_rep1 in 53s — hit target=H1 realized=0.45500284946674263
+[run ] H1_nominal_rep2
+[done] H1_nominal_rep2 in 51s — hit target=H1 realized=0.5238629262862557
+[run ] H1_nominal_rep3
+[done] H1_nominal_rep3 in 51s — hit target=H1 realized=0.5236397329516782
+index -> /home/ubuntu/exp-results/calib-20260710/index.json
