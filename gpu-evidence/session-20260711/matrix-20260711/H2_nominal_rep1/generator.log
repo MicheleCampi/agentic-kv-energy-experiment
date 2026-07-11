@@ -1,0 +1,32 @@
+{
+  "regime": "H2",
+  "condition": "nominal",
+  "rep": 1,
+  "seed": 200020657,
+  "prefix_version": "v1",
+  "prefix_tokens": 14785,
+  "target_context_tokens": 32768,
+  "n_sessions": 8,
+  "turns_generated": 55,
+  "history_tokens_final": 6498,
+  "sessions_growth_stopped": 7,
+  "max_session_tokens": 31684,
+  "requests_sent": 8,
+  "hitrate_target": "H2",
+  "hitrate_realized": null,
+  "prefix_cache_hits_delta": null,
+  "prefix_cache_queries_delta": null,
+  "sampling_params": {
+    "turns_mean": 31,
+    "turns_std": 20,
+    "turns_min": 6,
+    "turns_max": 65,
+    "append_out_ratio_mean": 4.8,
+    "output_tokens_mean": 180,
+    "output_tokens_std": 90,
+    "failure_inflation": 1.8
+  },
+  "error": null
+}
+
+wrote /home/ubuntu/exp-results/matrix-20260711/H2_nominal_rep1/manifest.json

@@ -1,0 +1,16 @@
+{
+  "engine_cmd": [
+    "/home/ubuntu/venv/bin/vllm",
+    "serve",
+    "Qwen/Qwen2.5-32B-Instruct",
+    "--port",
+    "8000",
+    "--enforce-eager"
+  ],
+  "api_pid": 5117,
+  "engine_core_pid": 5179,
+  "sample_secs": 120,
+  "seed_base": 42,
+  "run_nonce": 200,
+  "pip_freeze": "pip-freeze.txt"
+}

@@ -1,0 +1,38 @@
+{
+  "regime": "H2",
+  "condition": "failure",
+  "rep": 2,
+  "seed": 200020759,
+  "prefix_version": "v1",
+  "prefix_tokens": 14785,
+  "target_context_tokens": 32768,
+  "n_sessions": 8,
+  "turns_generated": 32,
+  "history_tokens_final": 6658,
+  "sessions_growth_stopped": 8,
+  "max_session_tokens": 31684,
+  "requests_sent": 8,
+  "hitrate_target": "H2",
+  "hitrate_realized": 0.9330176767676768,
+  "prefix_cache_hits_delta": 236464,
+  "prefix_cache_queries_delta": 253440,
+  "sampling_params": {
+    "turns_mean": 31,
+    "turns_std": 20,
+    "turns_min": 6,
+    "turns_max": 65,
+    "append_out_ratio_mean": 4.8,
+    "output_tokens_mean": 180,
+    "output_tokens_std": 90,
+    "failure_inflation": 1.8
+  },
+  "error": null,
+  "hitrate_scrape": "local vLLM /metrics (_total anchors), single engine",
+  "gpu": {
+    "sample_secs": 120,
+    "attach_offset_s": 0.5,
+    "generator_wall_s": 35.6,
+    "engine_pid": 5179,
+    "inferscope_json": "/home/ubuntu/exp-results/matrix-20260711/H2_failure_rep2/inferscope.json"
+  }
+}

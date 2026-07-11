@@ -1,0 +1,8 @@
+[gpu ] engine launched pid=3827, waiting ready (timeout 900s)
+[gpu ] EngineCore pid=3944, window=120s
+[warm] warm-up cell (discarded, prefix cache warming — re-run at EVERY engine start, never resumed)
+[run ] H1_nominal_rep1
+[done] H1_nominal_rep1 in 9s — hit target=H1 realized=0.49996618194115655
+[run ] H2_nominal_rep1
+[done] H2_nominal_rep1 in 120s — hit target=H2 realized=0.7330808080808081
+index -> /home/ubuntu/exp-results/smoke-20260711/index.json

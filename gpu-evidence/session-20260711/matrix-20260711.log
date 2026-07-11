@@ -1,0 +1,42 @@
+[gpu ] engine launched pid=5117, waiting ready (timeout 900s)
+[gpu ] EngineCore pid=5179, window=120s
+[warm] warm-up cell (discarded, prefix cache warming — re-run at EVERY engine start, never resumed)
+[run ] H1_nominal_rep1
+[done] H1_nominal_rep1 in 9s — hit target=H1 realized=0.49996618194115655
+[run ] H0_nominal_rep1
+[done] H0_nominal_rep1 in 120s — hit target=H0 realized=0.0
+[run ] H0_nominal_rep2
+[done] H0_nominal_rep2 in 120s — hit target=H0 realized=0.0
+[run ] H0_nominal_rep3
+[done] H0_nominal_rep3 in 120s — hit target=H0 realized=0.0
+[run ] H0_failure_rep1
+[done] H0_failure_rep1 in 120s — hit target=H0 realized=0.0
+[run ] H0_failure_rep2
+[done] H0_failure_rep2 in 120s — hit target=H0 realized=0.0
+[run ] H0_failure_rep3
+[done] H0_failure_rep3 in 120s — hit target=H0 realized=0.0
+[run ] H1_nominal_rep1
+[done] H1_nominal_rep1 in 120s — hit target=H1 realized=0.44887436047772417
+[run ] H1_nominal_rep2
+[done] H1_nominal_rep2 in 120s — hit target=H1 realized=0.5152698010835188
+[run ] H1_nominal_rep3
+[done] H1_nominal_rep3 in 120s — hit target=H1 realized=0.5142002989536621
+[run ] H1_failure_rep1
+[done] H1_failure_rep1 in 120s — hit target=H1 realized=0.5320131624843979
+[run ] H1_failure_rep2
+[done] H1_failure_rep2 in 120s — hit target=H1 realized=0.5474580082686087
+[run ] H1_failure_rep3
+[done] H1_failure_rep3 in 120s — hit target=H1 realized=0.5354515884798727
+[run ] H2_nominal_rep1
+[done] H2_nominal_rep1 in 120s — hit target=H2 realized=0.9329726480312593
+[run ] H2_nominal_rep2
+[done] H2_nominal_rep2 in 120s — hit target=H2 realized=0.9330176767676768
+[run ] H2_nominal_rep3
+[done] H2_nominal_rep3 in 120s — hit target=H2 realized=0.9334301316246331
+[run ] H2_failure_rep1
+[done] H2_failure_rep1 in 120s — hit target=H2 realized=0.9333712085345454
+[run ] H2_failure_rep2
+[done] H2_failure_rep2 in 120s — hit target=H2 realized=0.9330176767676768
+[run ] H2_failure_rep3
+[done] H2_failure_rep3 in 120s — hit target=H2 realized=0.9312099302175385
+index -> /home/ubuntu/exp-results/matrix-20260711/index.json

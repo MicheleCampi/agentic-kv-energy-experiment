@@ -1,0 +1,12 @@
+[gpu ] engine launched pid=4577, waiting ready (timeout 900s)
+[gpu ] EngineCore pid=4639, window=120s
+[warm] warm-up cell (discarded, prefix cache warming — re-run at EVERY engine start, never resumed)
+[run ] H1_nominal_rep1
+[done] H1_nominal_rep1 in 9s — hit target=H1 realized=0.49996618194115655
+[run ] H1_nominal_rep1
+[done] H1_nominal_rep1 in 120s — hit target=H1 realized=0.5151835870715623
+[run ] H1_nominal_rep2
+[done] H1_nominal_rep2 in 120s — hit target=H1 realized=0.5238629262862557
+[run ] H1_nominal_rep3
+[done] H1_nominal_rep3 in 120s — hit target=H1 realized=0.5236397329516782
+index -> /home/ubuntu/exp-results/calib-20260711/index.json
