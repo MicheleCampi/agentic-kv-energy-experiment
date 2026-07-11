@@ -85,6 +85,9 @@ valore si cambia a nodo acceso.
   --n-sessions 8 --target-context 32768 --prefix-version v1` — attesi
   H0=0.0 esatto, H1 in [0.40,0.60], H2>0.90, monotonia stretta.
   (prefix sim o target ridotti = composizione degenere, regime falsato)
+- Sim: `realized=None` + celle ~1s = endpoint :8000 giu' (port-forward), run
+  spazzatura -- `~/llmd-pf.sh up`, cancellare `sim-results/calibration/`, rilanciare.
+  Il generatore NON fallisce su connection refused (fail silenzioso, backlog F15).
 
 ## 6. Teardown
 - [ ] stop_engine (già in finally, verificare processo morto)
