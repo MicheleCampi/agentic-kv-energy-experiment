@@ -1,7 +1,10 @@
 """Callback handler emitting an inferscope ADR-013 steps-file (JSONL).
 
 One record per completed step:
-    {"step_id": str, "kind": "llm_call"|"tool", "t_start_unix_ns": int, "t_end_unix_ns": int}
+    {"step_id": u64, "kind": "llm_call"|"tool", "t_start_unix_ns": int, "t_end_unix_ns": int}
+
+(step_id is the ADR-013 contract: a plain driver-assigned integer, unique
+within the file; kind is already its own field, so no id-encoded kind.)
 
 Timestamps are taken with time.time_ns() inside the handler (wall-clock UTC ns),
 never from framework-internal timestamps. Start/end pairing is keyed on run_id.
@@ -37,7 +40,7 @@ class StepsFileCallback(BaseCallbackHandler):
         t_end = time.time_ns()
         self._seq += 1
         record = {
-            "step_id": f"{kind}-{self._seq:04d}",
+            "step_id": self._seq,
             "kind": kind,
             "t_start_unix_ns": t_start,
             "t_end_unix_ns": t_end,
