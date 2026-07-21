@@ -1,0 +1,1 @@
+inferscope: steps file runs/e2e-20260721T182955.jsonl: line 1: not a valid step record: invalid type: string "llm_call-0001", expected u64 at line 1 column 27

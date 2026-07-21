@@ -12,7 +12,7 @@ within 20 min).
 - Repo transfer: rsync from optim-dev with ~/.ssh/runpod_optimdev
   (private repo rule — no clone on Lambda). Same dir name.
 - Driver venv: recreate from driver/requirements.txt (pinned).
-- inferscope: build on node from public repo (cargo build --release).
+- inferscope: build on node from public repo (cargo build --release --features gpu-nvidia).
 
 ## Sequence (each step has its assert; stop-and-decide on any FAIL)
 
@@ -28,7 +28,7 @@ within 20 min).
      --model Qwen/Qwen2.5-7B-Instruct --steps-file runs/gpu-<ts>.jsonl
    Assert: driver gates pass (>=2+2 steps, zero overlap, positive spans).
 4. Concurrent attach, the rehearsed chain:
-   inferscope --sample-only --pid <vllm-pid> --duration-secs <span+30> \
+   inferscope --sample-only --gpu --pid <vllm-pid> --duration-secs <span+30> \
      --steps-file runs/gpu-<ts>.jsonl
    started ~2s before the driver (same launch pattern as the VM e2e).
    Assert (THE session assert): trajectory section PRESENT in the
@@ -52,3 +52,29 @@ within 20 min).
 
 NVML in the operator reporter, EA-vs-WF 8 reps, RPS/tariff check on
 A10 for the operator experiment.
+
+## Session findings (2026-07-21, executed — PASS)
+- Two runbook gaps found live (~9 min of the 15-min window), zero code
+  bugs. Root cause common to both: the e2e chain was rehearsed only on
+  the VM, where the GPU path is withheld by design, so the GPU flags
+  were never exercised.
+  1. Build: `gpu-nvidia` is a non-default cargo feature; plain
+     `cargo build --release` compiles no GPU path (no --gpu in --help).
+  2. Invocation: `--gpu` is explicit opt-in (ADR-005); token/cache
+     deltas additionally require `--metrics-endpoint` + `--model`
+     (ADR-011) or all deltas read zero and tok/J stays null.
+  Corrected step-4 invocation:
+    inferscope --sample-only --gpu --pid <vllm-pid> \
+      --duration-secs <span+30> \
+      --metrics-endpoint http://127.0.0.1:8000/metrics \
+      --model <model-id> --steps-file runs/gpu-<ts>.jsonl
+- Session assert PASS on both trajectories: per-step energy, exact
+  reconciliation (steps + unattributed == total, zero rounding drift),
+  dropped_steps empty. Second trajectory with ADR-011 scrape active:
+  168 generation tokens, trajectory tok/J populated.
+- Secondary finding: this vLLM digest honors parallel_tool_calls=false
+  (1 tool_call with 2 tools offered) — unlike the llama.cpp rehearsal.
+  Middleware serialization stays regardless.
+- Evidence: driver/runs/gpu-session-a/ (includes the three failed
+  reports and the orphan gpu-.jsonl documenting the gaps).
+- Node: 1x A10 Lambda, ~30 min wall, well under the $3 cap.

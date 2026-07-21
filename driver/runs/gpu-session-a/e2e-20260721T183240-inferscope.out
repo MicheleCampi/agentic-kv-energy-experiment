@@ -1,0 +1,18 @@
+{
+  "reference_instant_unix_ns": 1784658760938776045,
+  "pid": 766900,
+  "include_descendants": false,
+  "sample_period_ms": 50,
+  "duration_secs": 45,
+  "resource": {
+    "sample_count": 901,
+    "rss_min_bytes": 712355840,
+    "rss_max_bytes": 725454848,
+    "rss_mean_bytes": 714130994,
+    "rss_final_bytes": 714305536,
+    "cpu_mean_percent": 355.9806307726771,
+    "thread_min": 12,
+    "thread_max": 12
+  },
+  "gpu": null
+}
