@@ -19,7 +19,7 @@ H2 9.610 ± 0.029): the KV-cache efficiency gradient survives the failure
 regime essentially intact.
 
 Monotone in hit-rate, per-regime std < 3% of mean everywhere. Gross energy
-per fixed window: H0 ~42.5 kJ → H1 ~35 kJ → H2 ~26.5 kJ.
+per fixed window (means, n=6): H0 42.8 kJ -> H1 35.2 kJ -> H2 26.5 kJ.
 
 ## Metric definition and conservative-bound argument
 
