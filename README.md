@@ -101,4 +101,7 @@ silently-null energy path) is documented in `hack/gpu-session/`.
 
 ## Write-up
 
-Article forthcoming (in pipeline). <!-- go-live: add link -->
+[KV-cache reuse is an energy lever. Per-token attribution can't see
+it.](https://michelecampi.github.io/observability/systems-engineering/llm-inference/2026/07/30/agentic-kv-energy.html)
+(2026-07-30) — the write-up, including the two further results above and
+the limits of the evidence.
