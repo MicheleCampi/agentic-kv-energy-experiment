@@ -44,6 +44,18 @@ def main() -> int:
     parser.add_argument("--steps-file", required=True)
     parser.add_argument("--max-steps", type=int, default=20,
                         help="recursion limit for the graph (runaway guard)")
+    parser.add_argument(
+        "--prompt",
+        default=(
+            "Plan a small inference deployment: look up the specs for 'gpu-node' "
+            "and 'scheduler', then estimate the cost of 24 GPU hours at $2.50/hour. "
+            "Summarize your findings."
+        ),
+        help=(
+            "task given to the agent. The default is the one that produced the "
+            "published evidence; override it to drive a longer trajectory."
+        ),
+    )
     args = parser.parse_args()
 
     model = ChatOpenAI(
@@ -65,11 +77,7 @@ def main() -> int:
         ),
     )
 
-    prompt = (
-        "Plan a small inference deployment: look up the specs for 'gpu-node' "
-        "and 'scheduler', then estimate the cost of 24 GPU hours at $2.50/hour. "
-        "Summarize your findings."
-    )
+    prompt = args.prompt
 
     result = agent.invoke(
         {"messages": [{"role": "user", "content": prompt}]},
