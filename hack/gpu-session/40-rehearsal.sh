@@ -26,13 +26,21 @@ mkdir -p "$OUT"
 # from the warm-up cell x1.2; here the fake answers instantly and there is
 # nothing to measure. Deliberately unlike any session value so it cannot
 # be mistaken for one. The oversized-window warning SHOULD fire.
+# --target-context 20000, not the session's 32768: shorter, but it MUST
+# exceed the 14785-token prefix or the history budget goes negative and
+# the generator emits zero turns (first rehearsal run 2026-08-02:
+# target 2048 -> turns_generated 0, prefix-only requests).
+#
+# NOTE: no comments inside the continuation below. A '#' line after a
+# trailing backslash ENDS the command silently -- bash -n still passes
+# and every later argument is dropped without an error.
 exec python3 run_experiment.py \
   --model "$EXP_MODEL" \
   --endpoint http://127.0.0.1:8000 \
   --metrics-url http://127.0.0.1:8000/metrics \
   --regimes H0,H2 --conditions nominal --reps 1 \
   --n-sessions 2 \
-  --target-context 2048 \
+  --target-context 20000 \
   --seed-base 42 \
   --sample-secs 60 \
   --inferscope-bin "$EXP_INFERSCOPE_BIN" \
