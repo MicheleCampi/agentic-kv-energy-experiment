@@ -72,14 +72,20 @@ class RunManifest:
     hitrate_realized: float | None = None      # from Prometheus delta (sim)
     prefix_cache_hits_delta: int | None = None
     prefix_cache_queries_delta: int | None = None
+    # Provenance: which model SERVED the requests, and which tokenizer
+    # COUNTED them. They are not the same thing since the counter is
+    # taken from the prefix artifact (2026-08-02); a reader of these
+    # results must not have to assume they agree.
+    served_model: str = ""
+    count_tokenizer: str | None = None   # None when --bpe-counter is off
     sampling_params: dict = field(default_factory=dict)
     error: str | None = None
 
 
-def load_prefix(version: str) -> tuple[str, int]:
+def load_prefix(version: str) -> tuple[str, int, str]:
     txt = (PREFIX_DIR / f"agentic_system_{version}.txt").read_text()
     meta = json.loads((PREFIX_DIR / f"agentic_system_{version}.meta.json").read_text())
-    return txt, meta["token_count"]
+    return txt, meta["token_count"], meta["tokenizer"]
 
 
 def approx_tokens(text: str) -> int:
@@ -220,12 +226,22 @@ OUTPUT_HEADROOM_MARGIN = 64  # special/template tokens the raw encode does not s
 
 
 def run(args) -> RunManifest:
-    prefix, prefix_tokens = load_prefix(args.prefix_version)
+    prefix, prefix_tokens, prefix_tokenizer = load_prefix(args.prefix_version)
     regime_cfg = REGIMES[args.regime]
     rng = random.Random(args.seed)
     if args.bpe_counter:
         from transformers import AutoTokenizer
-        _tok = AutoTokenizer.from_pretrained(args.model)
+        # Count with the tokenizer the PREFIX was built with, declared in
+        # its .meta.json -- not with args.model. The two must agree or the
+        # prefix token count and the history budget are on different
+        # scales. Using args.model also made the generator depend on that
+        # model being cached: it broke the moment the campaign moved from
+        # 32B to 7B (dress rehearsal 2026-08-02).
+        # Verified on this box: Qwen2.5-0.5B and Qwen2.5-32B give byte
+        # identical ids (vocab 151643, len 151665). The 7B is the same
+        # family but was NOT verified here -- assert it on the node, where
+        # the served model is present anyway.
+        _tok = AutoTokenizer.from_pretrained(prefix_tokenizer)
         count_tokens = lambda t: len(_tok.encode(t, add_special_tokens=False))
     else:
         count_tokens = approx_tokens
@@ -238,6 +254,8 @@ def run(args) -> RunManifest:
         seed=args.seed, prefix_version=args.prefix_version,
         prefix_tokens=prefix_tokens, target_context_tokens=args.target_context,
         n_sessions=args.n_sessions, hitrate_target=args.regime,
+        served_model=args.model,
+        count_tokenizer=(prefix_tokenizer if args.bpe_counter else None),
         sampling_params=dict(SHADE),
     )
 
