@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Rehearsal shim: stands in for `vllm serve` so run_experiment.py runs
+# UNMODIFIED against fake_engine.py. Put this dir first on PATH; the
+# orchestrator's shutil.which("vllm") then resolves here.
+#
+# Translates the vllm CLI shape (`serve <model> --port N --enforce-eager`)
+# into the fake's flag shape (`--model <model> --port N`). Unknown args
+# are REJECTED, never ignored: a silently swallowed flag would make the
+# rehearsal exercise a launch the node will not perform.
+set -euo pipefail
+[ "${1:-}" = "serve" ] || { echo "shim: expected 'serve', got '${1:-}'" >&2; exit 64; }
+shift
+MODEL="${1:?shim: model positional missing}"; shift
+PORT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --port) PORT="${2:?shim: --port needs a value}"; shift 2 ;;
+    --enforce-eager) shift ;;
+    *) echo "shim: unexpected arg '$1' (the node would pass it to vllm; refusing to ignore)" >&2; exit 64 ;;
+  esac
+done
+[ -n "$PORT" ] || { echo "shim: --port never passed" >&2; exit 64; }
+exec python3 "$(dirname "$0")/../fake_engine.py" --port "$PORT" --model "$MODEL"
