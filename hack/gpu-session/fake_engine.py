@@ -36,8 +36,8 @@ class H(BaseHTTPRequestHandler):
             with LOCK:
                 q, h = STATE["queries"], STATE["hits"]
             self._send(200,
-                f'vllm:prefix_cache_hits_total{{model_name="fake"}} {h}\n'
-                f'vllm:prefix_cache_queries_total{{model_name="fake"}} {q}\n')
+                f'vllm:prefix_cache_hits_total{{model_name="{MODEL}"}} {h}\n'
+                f'vllm:prefix_cache_queries_total{{model_name="{MODEL}"}} {q}\n')
         else:
             self._send(404, "nf")
     def do_POST(self):
