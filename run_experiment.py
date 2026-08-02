@@ -292,8 +292,24 @@ def run_cell(args, regime, condition, rep, scrape, gpu_ctx=None):
                 "generator filled >90% of the sample window; widen "
                 "--sample-secs (a truncated window undercounts energy "
                 "while tokens come from the full run -> tok/J inflated)")
-            print(f"[WARN] {cell}: generator wall {gen_wall:.0f}s > 90% "
-                  f"of window {gpu_ctx['sample_secs']}s")
+        elif gen_wall < 0.6 * gpu_ctx["sample_secs"]:
+            # The opposite failure, and the one that matters for cost:
+            # an oversized window bills idle GPU to the run. Occupancy
+            # cost is the window, so slack goes straight into
+            # unattributed. The 2026-07-21 A10 report read 91.2%
+            # residual for exactly this reason and it was mistaken for
+            # driver think time.
+            m["gpu"]["window_warning"] = (
+                f"generator filled only {100*gen_wall/gpu_ctx['sample_secs']:.0f}% "
+                "of the sample window; the remainder is idle GPU inside the "
+                "measured window. Harmless for tok/J, but it inflates the "
+                "unattributed share of any occupancy cost derived from this "
+                "report (ADR-015). Narrow --sample-secs or read cost from "
+                "the trajectory span instead of the run span.")
+        if "window_warning" in m["gpu"]:
+            print(f"[WARN] {cell}: generator wall {gen_wall:.0f}s vs window "
+                  f"{gpu_ctx['sample_secs']}s "
+                  f"({100*gen_wall/gpu_ctx['sample_secs']:.0f}% filled)")
     manifest.write_text(json.dumps(m, indent=2))
     print(f"[done] {cell} in {time.time() - t0:.0f}s — "
           f"hit target={m.get('hitrate_target')} realized={m.get('hitrate_realized')}")
