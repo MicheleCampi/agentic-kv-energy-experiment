@@ -232,6 +232,11 @@ def run_cell(args, regime, condition, rep, scrape, gpu_ctx=None):
             # ADR-012: Prometheus scrape on the same window as the NVML
             # attach -> per-phase energy alongside whole-window energy.
             "--metrics-endpoint", args.metrics_url,
+            # ADR-014 D1: the metric vocabulary is declared, never
+            # inferred from the scrape body. Mandatory alongside
+            # --metrics-endpoint since inferscope v0.5; without it the
+            # cell dies at argument parsing.
+            "--engine", "vllm",
             "--model", args.model,
             "--json",
         ]
@@ -355,15 +360,37 @@ def main():
             sys.exit("inferscope contract check FAILED: --gpu absent from "
                      "--help (binary built without gpu-nvidia feature?). "
                      "Rebuild: cargo build --release --features gpu-nvidia")
+        # ADR-014 makes --engine mandatory whenever --metrics-endpoint is
+        # given. The dummy probe below omits the metrics flag, so it never
+        # exercised that requirement: the July harness would have died at
+        # the first real cell against inferscope v0.5 (found 2026-08-02,
+        # node off).
+        if "--engine" not in hp.stdout:
+            sys.exit("inferscope contract check FAILED: --engine absent from "
+                     "--help; this harness passes --metrics-endpoint, which "
+                     "requires it (ADR-014).")
+        # ADR-015 cost derivation is a subcommand over the written report.
+        # Without it the campaign produces reports nothing can price.
+        if "cost" not in hp.stdout:
+            sys.exit("inferscope contract check FAILED: `cost` subcommand "
+                     "absent from --help (binary predates ADR-015).")
         probe = subprocess.run(
             [args.inferscope_bin, "--sample-only", "--pid", str(os.getpid()),
-             "--duration-secs", "1", "--json"],
+             "--duration-secs", "1",
+             # Exercise the flags the cells actually use, against an
+             # endpoint that will not answer: the scrape is best-effort,
+             # so an unreachable target is fine and argument rejection is
+             # not.
+             "--metrics-endpoint", "http://127.0.0.1:1/metrics",
+             "--engine", "vllm", "--model", args.model,
+             "--json"],
             capture_output=True, text=True)
         try:
             json.loads(probe.stdout)
         except Exception:
             sys.exit("inferscope contract check FAILED: dummy --sample-only "
-                     "did not emit parseable JSON on stdout")
+                     "with the cells' own flags did not emit parseable JSON "
+                     f"on stdout. stderr: {probe.stderr[:300]}")
         engine_proc, engine_cmd = launch_engine(args)
         print(f"[gpu ] engine launched pid={engine_proc.pid}, waiting ready "
               f"(timeout {args.ready_timeout}s)")
