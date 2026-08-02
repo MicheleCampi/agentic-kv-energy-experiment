@@ -1,0 +1,35 @@
+{
+  "regime": "H2",
+  "condition": "nominal",
+  "rep": 1,
+  "seed": 69988509984957,
+  "prefix_version": "v1",
+  "prefix_tokens": 14785,
+  "target_context_tokens": 20000,
+  "n_sessions": 2,
+  "turns_generated": 6,
+  "history_tokens_final": 3040,
+  "sessions_growth_stopped": 2,
+  "max_session_tokens": 19555,
+  "requests_sent": 2,
+  "hitrate_target": "H2",
+  "hitrate_realized": null,
+  "prefix_cache_hits_delta": null,
+  "prefix_cache_queries_delta": null,
+  "served_model": "Qwen/Qwen2.5-7B-Instruct",
+  "count_tokenizer": "Qwen/Qwen2.5-0.5B-Instruct",
+  "sampling_params": {
+    "turns_mean": 31,
+    "turns_std": 20,
+    "turns_min": 6,
+    "turns_max": 65,
+    "append_out_ratio_mean": 4.8,
+    "output_tokens_mean": 180,
+    "output_tokens_std": 90,
+    "failure_inflation": 1.8
+  },
+  "error": null
+}
+
+wrote /root/exp-results/rehearsal-20260802T194443/H2_nominal_rep1/manifest.json
+[transformers] PyTorch was not found. Models won't be available and only tokenizers, configuration and file/data utilities can be used.

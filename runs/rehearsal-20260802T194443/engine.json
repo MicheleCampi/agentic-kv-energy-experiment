@@ -1,0 +1,16 @@
+{
+  "engine_cmd": [
+    "/root/agentic-kv-energy-experiment/hack/gpu-session/rehearsal-bin/vllm",
+    "serve",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "--port",
+    "8000",
+    "--enforce-eager"
+  ],
+  "api_pid": 1940455,
+  "engine_core_pid": 1940457,
+  "sample_secs": 60,
+  "seed_base": 42,
+  "run_nonce": 69988300,
+  "pip_freeze": "pip-freeze.txt"
+}
