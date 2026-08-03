@@ -29,8 +29,20 @@ class StepsFileCallback(BaseCallbackHandler):
         with open(self._path, "w", encoding="utf-8"):
             pass
 
+    def begin_step(self, key: UUID, kind: str) -> None:
+        """Open a step segment. Public: the replay arm has no
+        framework to emit callbacks, so it drives the handler
+        directly. Both arms must open and close segments through
+        the same code, or the two steps-files are not comparable.
+        """
+        self._open_runs[key] = (kind, time.time_ns())
+
     def _start(self, run_id: UUID, kind: str) -> None:
-        self._open_runs[run_id] = (kind, time.time_ns())
+        self.begin_step(run_id, kind)
+
+    def end_step(self, key: UUID) -> None:
+        """Close a step segment opened by begin_step."""
+        self._end(key)
 
     def _end(self, run_id: UUID) -> None:
         entry = self._open_runs.pop(run_id, None)

@@ -15,13 +15,21 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
 from steps_callback import StepsFileCallback
+from trajectory_gates import check_and_write_meta
 from serialize_tools import SerializeToolCalls
 
+
+# Tool latency is a DESIGN PARAMETER, not a measurement. It is swept
+# across cells so that the published figure is a curve with a stated
+# crossover, never a single point that a reader could mistake for a
+# property of the workload. Set via --tool-latency-s; the value in
+# force is recorded next to the steps-file.
+TOOL_LATENCY_S = 0.2
 
 @tool
 def lookup_component(name: str) -> str:
     """Return specs for a named infrastructure component."""
-    time.sleep(0.2)  # deterministic, visible tool segment
+    time.sleep(TOOL_LATENCY_S)  # deterministic, visible tool segment
     specs = {
         "gpu-node": "8x H100 SXM5, 2TB RAM, NVLink",
         "scheduler": "EPP-based, KV-cache aware scoring",
@@ -33,7 +41,7 @@ def lookup_component(name: str) -> str:
 @tool
 def estimate_cost(gpu_hours: float, rate_per_hour: float) -> str:
     """Estimate cost in USD for a number of GPU hours at a given hourly rate."""
-    time.sleep(0.2)
+    time.sleep(TOOL_LATENCY_S)
     return f"${gpu_hours * rate_per_hour:.2f}"
 
 
@@ -42,6 +50,9 @@ def main() -> int:
     parser.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
     parser.add_argument("--model", default="qwen")
     parser.add_argument("--steps-file", required=True)
+    parser.add_argument("--tool-latency-s", type=float, default=0.2,
+                        help="seconds each tool sleeps. Design parameter, "
+                             "swept across cells; recorded in the meta file.")
     parser.add_argument("--max-steps", type=int, default=20,
                         help="recursion limit for the graph (runaway guard)")
     parser.add_argument(
@@ -57,6 +68,8 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
+    global TOOL_LATENCY_S
+    TOOL_LATENCY_S = args.tool_latency_s
 
     model = ChatOpenAI(
         base_url=args.base_url,
@@ -84,39 +97,19 @@ def main() -> int:
         config={"callbacks": [handler], "recursion_limit": args.max_steps},
     )
 
-    # sanity gates
-    if handler.open_runs != 0:
-        print(f"FAIL: {handler.open_runs} unclosed run(s) — boundary anomaly",
-              file=sys.stderr)
-        return 1
-
-    with open(args.steps_file, encoding="utf-8") as f:
-        steps = [json.loads(line) for line in f]
-
-    kinds = [s["kind"] for s in steps]
-    n_llm, n_tool = kinds.count("llm_call"), kinds.count("tool")
-    overlaps = sum(
-        1 for a, b in zip(steps, steps[1:])
-        if b["t_start_unix_ns"] < a["t_end_unix_ns"]
+    return check_and_write_meta(
+        args.steps_file,
+        handler.open_runs,
+        {
+            "arm": "agentic",
+            "tool_latency_s": args.tool_latency_s,
+            "model": args.model,
+            "base_url": args.base_url,
+            "max_steps": args.max_steps,
+            "prompt": args.prompt,
+        },
+        final_text=result["messages"][-1].content,
     )
-    bad_span = sum(1 for s in steps if s["t_end_unix_ns"] <= s["t_start_unix_ns"])
-
-    print(f"steps: {len(steps)} (llm_call={n_llm}, tool={n_tool})")
-    print(f"overlapping consecutive segments: {overlaps}")
-    print(f"non-positive spans: {bad_span}")
-    print(f"final message: {result['messages'][-1].content[:200]!r}")
-
-    if n_llm < 2 or n_tool < 2:
-        print("FAIL: trajectory too short — need >=2 llm_call and >=2 tool steps",
-              file=sys.stderr)
-        return 1
-    if bad_span:
-        print("FAIL: non-positive span(s)", file=sys.stderr)
-        return 1
-    if overlaps:
-        print("FAIL: overlapping segments — serialization broken", file=sys.stderr)
-        return 1
-    return 0
 
 
 if __name__ == "__main__":
