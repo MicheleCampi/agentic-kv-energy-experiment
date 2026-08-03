@@ -6,7 +6,11 @@ evidence directory is not a test dependency, and the branches that
 matter most are precisely the ones no real report exercises.
 """
 
+import ast
 import json
+import math
+import random
+import statistics
 import tempfile
 import unittest
 from pathlib import Path
@@ -172,6 +176,68 @@ class TestLoad(unittest.TestCase):
         r = analyze(t, 18 * NS)
         self.assertAlmostEqual(r["window_excess_factor"], 8.0, places=6)
         self.assertAlmostEqual(r["span_s"], 2.5, places=6)
+
+
+def _load_sample_latency():
+    """Extract sample_latency from run_replay without importing it.
+
+    run_replay imports openai at module level; these tests must run
+    outside the driver venv. Loading the function alone also asserts
+    what it claims to be: pure maths over math and random, with no
+    dependency on module state.
+    """
+    tree = ast.parse((Path(__file__).parent / "run_replay.py").read_text())
+    fn = next(n for n in tree.body
+              if isinstance(n, ast.FunctionDef) and n.name == "sample_latency")
+    ns = {"math": math, "random": random}
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), "<fn>", "exec"), ns)
+    return ns["sample_latency"]
+
+
+class TestToolLatencyDistribution(unittest.TestCase):
+
+    def setUp(self):
+        self.sample = _load_sample_latency()
+
+    def test_zero_cv_returns_the_mean_without_drawing(self):
+        # Existing cells must reproduce bit-for-bit, not approximately.
+        # Drawing and discarding would also desynchronise the RNG.
+        rng = random.Random(42)
+        state = rng.getstate()
+        for mean in (0.2, 2.0, 5.0):
+            self.assertEqual(self.sample(rng, mean, 0.0), mean)
+        self.assertEqual(rng.getstate(), state)
+
+    def test_arithmetic_mean_is_preserved_under_spread(self):
+        # The -sigma_log**2/2 correction. Without it the realised mean
+        # is mean*exp(sigma**2/2): +11.8% at cv=0.5, +41.4% at cv=1.0,
+        # so the axis label would misstate every cell. Tolerance is 1%,
+        # far tighter than those biases and loose enough for 100k draws.
+        for mean, cv in ((0.2, 0.5), (2.0, 0.5), (5.0, 1.0)):
+            with self.subTest(mean=mean, cv=cv):
+                rng = random.Random(42)
+                xs = [self.sample(rng, mean, cv) for _ in range(100_000)]
+                self.assertAlmostEqual(statistics.fmean(xs) / mean, 1.0,
+                                       delta=0.01)
+
+    def test_realised_cv_matches_the_requested_one(self):
+        for cv in (0.25, 0.5, 1.0):
+            with self.subTest(cv=cv):
+                rng = random.Random(7)
+                xs = [self.sample(rng, 2.0, cv) for _ in range(100_000)]
+                got = statistics.pstdev(xs) / statistics.fmean(xs)
+                self.assertAlmostEqual(got, cv, delta=0.02)
+
+    def test_samples_are_strictly_positive(self):
+        # A negative sleep is an exception mid-trajectory on a paid node.
+        rng = random.Random(1)
+        xs = [self.sample(rng, 0.2, 1.5) for _ in range(50_000)]
+        self.assertGreater(min(xs), 0.0)
+
+    def test_same_seed_reproduces_the_same_draws(self):
+        a = [self.sample(random.Random(99), 2.0, 0.5) for _ in range(1)]
+        b = [self.sample(random.Random(99), 2.0, 0.5) for _ in range(1)]
+        self.assertEqual(a, b)
 
 
 if __name__ == "__main__":
