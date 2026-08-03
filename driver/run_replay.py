@@ -25,6 +25,8 @@ Both arms write the same steps-file format through the same
 StepsFileCallback and pass the same gates in trajectory_gates.py.
 """
 import argparse
+import math
+import random
 import sys
 import time
 import uuid
@@ -35,13 +37,48 @@ from steps_callback import StepsFileCallback
 from trajectory_gates import check_and_write_meta
 
 
+def sample_latency(rng: random.Random, mean_s: float, cv: float) -> float:
+    """One tool latency in seconds, lognormal with the stated mean and CV.
+
+    Parametrised by ARITHMETIC mean, not by the underlying normal's mean.
+    For a lognormal, sigma_log**2 = ln(1 + cv**2) and mu_log = ln(mean) -
+    sigma_log**2 / 2; without that second term the realised mean would be
+    mean * exp(sigma_log**2 / 2), so at cv=0.5 every cell would run 11%
+    slower than the axis says it did. The correction is what makes
+    --tool-latency-s keep meaning what it claims once cv > 0.
+
+    Lognormal rather than truncated normal because real tool calls are
+    right-skewed: a low median with a long tail of slow ones. A normal
+    would also need truncation at zero, which silently shifts the mean
+    it was chosen to preserve.
+
+    cv == 0 returns the mean exactly, so existing cells reproduce
+    bit-for-bit rather than approximately.
+    """
+    if cv == 0.0:
+        return mean_s
+    sigma_log = math.sqrt(math.log(1.0 + cv * cv))
+    mu_log = math.log(mean_s) - sigma_log * sigma_log / 2.0
+    return rng.lognormvariate(mu_log, sigma_log)
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--base-url", default="http://127.0.0.1:8000/v1")
     p.add_argument("--model", required=True)
     p.add_argument("--steps-file", required=True)
     p.add_argument("--tool-latency-s", type=float, default=0.2,
-                   help="seconds each tool step sleeps. The swept variable.")
+                   help="mean seconds each tool step sleeps. The swept "
+                        "variable.")
+    p.add_argument("--tool-latency-cv", type=float, default=0.0,
+                   help="coefficient of variation (sigma/mean) of tool "
+                        "latency. 0.0 reproduces the fixed-latency "
+                        "behaviour exactly. A CV is comparable across "
+                        "cells of different mean, which an absolute sigma "
+                        "is not: 0.5s of spread is absurd at a 0.2s mean "
+                        "and modest at a 5.0s one. Sampled lognormal, "
+                        "which is right-skewed like real tool calls: "
+                        "median low, mean pulled up by the rare slow one.")
     p.add_argument("--n-llm", type=int, default=4,
                    help="LLM calls in the trajectory. Fixed by design.")
     p.add_argument("--n-tool", type=int, default=3,
@@ -55,6 +92,16 @@ def main() -> int:
 
     if args.n_llm < 2 or args.n_tool < 2:
         sys.exit("--n-llm and --n-tool must both be >= 2 (ADR-013 gates)")
+    if args.tool_latency_cv < 0.0:
+        sys.exit("--tool-latency-cv must be >= 0")
+    if args.tool_latency_s <= 0.0:
+        sys.exit("--tool-latency-s must be > 0")
+
+    # Own RNG instance, not the module-global state: any library that
+    # samples in this process would otherwise shift the sequence and
+    # make the seed recorded in the .meta.json a false claim.
+    rng = random.Random(args.seed)
+    latencies = []
 
     client = OpenAI(base_url=args.base_url, api_key="dummy")
     handler = StepsFileCallback(args.steps_file)
@@ -91,7 +138,10 @@ def main() -> int:
         if i < args.n_tool:
             tool_id = uuid.uuid4()
             handler.begin_step(tool_id, "tool")
-            time.sleep(args.tool_latency_s)
+            latency = sample_latency(rng, args.tool_latency_s,
+                                     args.tool_latency_cv)
+            latencies.append(latency)
+            time.sleep(latency)
             handler.end_step(tool_id)
             messages.append({
                 "role": "user",
@@ -105,6 +155,8 @@ def main() -> int:
         {
             "arm": "replay",
             "tool_latency_s": args.tool_latency_s,
+            "tool_latency_cv": args.tool_latency_cv,
+            "tool_latency_realised_s": latencies,
             "model": args.model,
             "base_url": args.base_url,
             "n_llm_planned": args.n_llm,
