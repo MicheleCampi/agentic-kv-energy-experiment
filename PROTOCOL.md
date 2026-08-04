@@ -190,297 +190,288 @@ Generatore + path di cattura sviluppati e validati su `llm-d-inference-sim`
 (2) il path di cattura produce record completi. Output in `sim-results/`.
 Solo dopo validazione in simulazione si passa al nodo GPU per la cattura energia.
 
-## Asse terziario: costo per traiettoria agentica (fase 2)
+## Tertiary axis: cost per agentic trajectory (phase 2)
 
-La matrice hit-rate misura tok/J al variare del riuso di cache. Questa fase
-misura una cosa diversa sullo stesso nodo: **quanta parte del prezzo di una
-GPU si paga mentre quella GPU non sta generando**, al variare della latenza
-degli strumenti che l'agente chiama.
+The hit-rate matrix measures tok/J as cache reuse varies. This phase measures
+something different on the same node: **how much of a GPU's price is paid
+while that GPU is not generating**, as the latency of the tools the agent
+calls varies.
 
-Le due fasi non si uniscono in un orchestratore solo. ADR-013 vuole **una**
-traiettoria in volo per attribuire energia per-step; la matrice vuole N
-sessioni concorrenti per muovere l'hit-rate. Sono forme incompatibili: due
-fasi sequenziali sullo stesso nodo, non un esperimento fattorializzato.
+The two phases do not merge into one orchestrator. ADR-013 wants **one**
+trajectory in flight to attribute energy per step; the matrix wants N
+concurrent sessions to move the hit-rate. The shapes are incompatible: two
+sequential phases on the same node, not a factorial experiment.
 
-### Il denominatore: span della traiettoria, non della finestra
+### The denominator: trajectory span, not window span
 
-Decisione portante, e la misura che l'ha imposta.
+The load-bearing decision, and the measurement that forced it.
 
-`f_nongen` = (Σ durate tool + Σ gap fra step consecutivi) / span.
+`f_nongen` = (Σ tool durations + Σ gaps between consecutive steps) / span.
 
-Lo **span è quello della traiettoria** — `last.end_elapsed_ns −
-first.start_elapsed_ns` — non `run_duration_ns`, che è lo span della finestra
-di campionamento. Le due definizioni sono entrambe difendibili sulla carta e
-differiscono di un ordine di grandezza sui dati reali.
+The **span is the trajectory's** — `last.end_elapsed_ns −
+first.start_elapsed_ns` — not `run_duration_ns`, which is the span of the
+sampling window. Both definitions are defensible on paper and they differ by
+an order of magnitude on real data.
 
-Evidenza: `~/inferscope/validation-results/adr-013-a10-vllm/report-20260721T193436.txt`
-(A10, Qwen2.5-7B, vLLM, tool 200 ms). Il campionamento inizia 3,878s prima
-del primo step e la finestra è 150s contro una traiettoria di 6,218s — 24×.
-Sulla stessa run: energia unattributed **91% della finestra**, tempo non
-generante **9,78% della traiettoria**.
+Evidence: `~/inferscope/validation-results/adr-013-a10-vllm/report-20260721T193436.txt`
+(A10, Qwen2.5-7B, vLLM, 200 ms tools). Sampling starts 3.878s before the first
+step and the window is 150s against a 6.218s trajectory — 24×. On that same
+run: unattributed energy **91% of the window**, non-generating time **9.78% of
+the trajectory**.
 
-Se l'headline fosse "la frazione del costo pagata mentre la GPU non genera" e
-il denominatore fosse la finestra, il numero pubblicato sarebbe dominato da un
-artefatto di sovradimensionamento dello strumento. Con `EXP_WINDOW_MARGIN=1.2`
-il gonfiaggio resterebbe del 20% strutturale anche a finestra ben calibrata.
+If the headline were "the fraction of the cost paid while the GPU is not
+generating" and the denominator were the window, the published figure would be
+dominated by an instrument oversizing artefact. With `EXP_WINDOW_MARGIN=1.2`
+the inflation would stay at a structural 20% even with a well-calibrated
+window.
 
-`run_duration_ns` resta nell'analisi come **diagnostica di eccesso finestra**,
-dichiarata accanto al risultato, mai come denominatore. Un test pinna
-l'ancoraggio pubblicato (f_nongen 9,78%, packing bound 1,11).
+`run_duration_ns` stays in the analysis as a **window-excess diagnostic**,
+declared alongside the result, never as a denominator. A test pins the
+published anchor (f_nongen 9.78%, packing bound 1.11).
 
-### Ancoraggio alla fonte
+### Anchoring to the source
 
-La tabella di provenienza sopra dà `tempo LLM vs tool: LLM 71–98%, tool 2–29%`
-(Fig. 7, GAIA al massimo). È l'intervallo in cui `f_nongen` deve cadere perché
-la misura sia rappresentativa di traffico agentico reale: il 9,78% misurato il
-21/07 ci sta dentro, verso il basso. Lo sweep delle latenze è scelto per
-**coprire l'intervallo della fonte**, non per esplorare un range arbitrario.
+The provenance table above gives `LLM vs tool time: LLM 71–98%, tool 2–29%`
+(Fig. 7, GAIA at the top of the range). That is the interval `f_nongen` has to
+fall inside for the measurement to be representative of real agentic traffic:
+the 9.78% measured on 21/07 sits within it, towards the bottom. The latency
+sweep is chosen to **cover the source's interval**, not to explore an
+arbitrary range.
+### The two policies, and the one the measurement falsifies
 
-### Le due politiche, e quella che la misura falsifica
+The decision arm (`driver/analyze_cost_decision.py`) evaluates two platform
+policies over the same report. Both **dimensionless**, and therefore
+independent of the declared price: the $/M token figure comes separately from
+`inferscope cost` on the node, and the two readings do not contaminate each
+other.
 
-Il braccio decisionale (`driver/analyze_cost_decision.py`) valuta due politiche
-di piattaforma sullo stesso report. Entrambe **adimensionali**, quindi
-indipendenti dal prezzo dichiarato: il $/M token viene separatamente da
-`inferscope cost` sul nodo, e le due letture non si contaminano.
+**P1 — release per segment.** Frees the GPU on every tool segment longer than
+the re-entry price. Saving = Σ(d − C) over segments with d > C, where C is the
+cold start **measured** in `vllm-coldstart-probe` (~18s, with the 27s/96s
+finding declaring its variance). `--reentry-secs` is mandatory with no
+default: the value must be visible in the command that produced the numbers.
 
-**P1 — rilascio per segmento.** Libera la GPU su ogni segmento tool più lungo
-del prezzo di rientro. Saving = Σ(d − C) sui segmenti con d > C, dove C è il
-cold start **misurato** in `vllm-coldstart-probe` (~18s, con il finding
-27s/96s che ne dichiara la varianza). `--reentry-secs` è obbligatorio senza
-default: il valore dev'essere visibile nel comando che ha prodotto i numeri.
+On the 21/07 A10 anchor, P1 is **0.000s**. It is zero by construction: the
+longest tool segment in the sweep is 5.0s against ~18s of re-entry. **The
+obvious policy is falsified by the measurement, and that is the result to
+publish** — not a negative outcome to bury. The domain of the claim travels
+with it: the saving from interrupted occupancy is real only if the freed GPU
+serves something else, and on a rental billed at hourly granularity it saves
+nothing.
 
-Sull'ancoraggio A10 del 21/07, P1 vale **0,000s**. È zero per costruzione:
-il segmento tool più lungo dello sweep è 5,0s contro ~18s di rientro. **La
-politica ovvia è falsificata dalla misura, e questo è il risultato da
-pubblicare** — non un esito negativo da nascondere. Il dominio del claim va
-dichiarato con esso: il risparmio da occupancy interrotta è reale solo se la
-GPU liberata serve altro, e su un noleggio a granularità oraria non risparmia
-nulla.
+**P2 — packing.** Non-generating time is not freed: it is filled. Overlap
+bound `1/(1 − f_nongen)`, i.e. how many trajectories one GPU can host before
+the generating segments contend. On the anchor: 1.11. It is an **upper bound
+under declared non-interference** — real batching changes throughput — and the
+limit travels beside the number, not after it.
 
-**P2 — packing.** Il tempo non generante non si libera: si riempie. Bound di
-sovrapposizione `1/(1 − f_nongen)`, cioè quante traiettorie una GPU può
-ospitare prima che i segmenti generanti si contendano. Sull'ancoraggio: 1,11.
-È un **upper bound sotto non-interferenza dichiarata** — il batching reale
-cambia il throughput — e il limite viaggia accanto al numero, non dopo.
+### Sweep, replicas, dispersion
 
-### Sweep, repliche, dispersione
+Tool latency is a **parameter we chose**: what gets published is the curve
+with its crossover, not a point. Four values (0.2 / 0.5 / 2.0 / 5.0 s per
+tool) cover two orders of magnitude and the source's interval.
 
-La tool latency è un **parametro scelto da noi**: si pubblica la curva col
-crossover, non un punto. Quattro valori (0,2 / 0,5 / 2,0 / 5,0 s/tool)
-coprono due ordini di grandezza e l'intervallo della fonte.
+**Three replicas per cell at declared seeds**, not one run. With `max_tokens`
+fixed the seed does not move the structure — it moves the generated text — so
+the spread across replicas measures engine jitter on the LLM span, which is
+the denominator. One run per cell would publish a point without knowing
+whether it is distinguishable from its neighbour.
 
-**Tre repliche per cella a seed dichiarati**, non una run. Con `max_tokens`
-fisso il seed non muove la struttura — muove il testo generato — quindi la
-dispersione fra repliche misura il jitter dell'engine sullo span LLM, che è
-il denominatore. Una run per cella pubblicherebbe un punto senza sapere se è
-distinguibile dal vicino.
+**The tool-latency CV is not a second sweep dimension.** `f_nongen` sums 3-5
+durations and the mean dominates: variance does not move the curve. What it
+moves is the **reliability of the bound under concurrency**. So it is one cell
+of the sweep (2.0 s per tool) repeated at CV 0.5 — three extra cells, and the
+difference between publishing a limit and publishing a limit with its
+dispersion. Lognormal distribution parametrised by arithmetic mean and CV,
+which is the only form in which the two flags mean what they say; at CV 0 the
+behaviour is bit-identical to the cells already validated.
+### Measurement arm and anchoring arm
 
-**Il CV della tool latency non è una seconda dimensione dello sweep.**
-`f_nongen` somma 3-5 durate e la media domina: la varianza non muove la curva.
-Quello che muove è l'**affidabilità del bound sotto concorrenza**. Quindi una
-sola cella dello sweep (2,0 s/tool) ripetuta a CV 0,5 — tre celle in più, e la
-differenza fra pubblicare un limite e pubblicare un limite con la sua
-dispersione. Distribuzione lognormale parametrizzata per media aritmetica e
-CV, che è l'unica forma in cui i due flag significano ciò che dicono; a CV 0
-il comportamento è bit-identico alle celle già validate.
+The same conclusion the "deterministic replay, not a real agent" section
+reached, arrived at again for a different measurement.
 
-### Braccio di misura e braccio di ancoraggio
+Driving the sweep with the real Deep Agents loop does not work, and the
+measurement says so: one prompt, one model, temperature 0.0, three runs gave
+spans of 7.4s / 12.7s / 34.7s with 4-8 steps. The model decides the shape of
+the trajectory, so numerator and denominator both move for reasons unrelated
+to the parameter being swept. A curve built on that arm would not be readable.
 
-Stessa conclusione della sezione "replay deterministico, non agente reale",
-raggiunta di nuovo per una misura diversa.
+`run_replay.py` fixes the number of LLM calls, the number of tool steps and
+the tokens generated per call, and leaves tool latency as the only variable.
+Three repetitions at 0.2 s per tool: spans 11.1 / 10.9 / 11.0s — **1.8%
+spread** against the agentic arm's factor of 4.7.
 
-Guidare lo sweep con il vero loop Deep Agents non funziona, e la misura lo
-dice: stesso prompt, stesso modello, temperature 0.0, tre run hanno dato span
-7,4s / 12,7s / 34,7s con 4-8 step. Il modello decide la forma della
-traiettoria, quindi numeratore e denominatore si muovono entrambi per ragioni
-scorrelate dal parametro che si sweeppa. Una curva costruita su quel braccio
-non sarebbe leggibile.
+`run_trajectory.py` is not replaced: it **anchors** the replay. Run at the same
+latency on the same node, it shows real trajectories landing in the region the
+replay describes (31.5% against 36.3% at 2.0 s per tool in the llama.cpp
+rehearsal, the gap explained by n_tool 2 against 3). Two arms, each proving
+what it can.
 
-`run_replay.py` fissa numero di chiamate LLM, numero di step tool e token
-generati per chiamata, e lascia la tool latency come unica variabile. Tre
-ripetizioni a 0,2 s/tool: span 11,1 / 10,9 / 11,0s — **dispersione 1,8%**
-contro il fattore 4,7 del braccio agentico.
+Both write the same format through the same `StepsFileCallback` and pass the
+same gates in `trajectory_gates.py`: a gate that differed between the arms
+would make the anchoring cells useless as evidence.
 
-`run_trajectory.py` non è sostituito: **ancora** il replay. Girato alla stessa
-latenza sullo stesso nodo, mostra traiettorie reali che cadono nella regione
-che il replay descrive (31,5% contro 36,3% a 2,0 s/tool nella prova su
-llama.cpp, scarto spiegato da n_tool 2 contro 3). Due bracci, ciascuno prova
-ciò che può.
+### Irreversible parameters, per cell
 
-Entrambi scrivono lo stesso formato attraverso lo stesso `StepsFileCallback` e
-passano gli stessi gate in `trajectory_gates.py`: un gate che differisse fra i
-bracci renderebbe inutili le celle di ancoraggio come evidenza.
+Two, and neither correctable after the fact:
 
-### Parametri irreversibili per cella
+- **The sampling window.** Sized from the span of a calibration trajectory
+  measured on the node, per cell: (span + that cell's tool wall) × margin. Not
+  one window for the whole sweep: at 5.0 s per tool the trajectory is ~14s
+  longer than at 0.2s.
+- **The steps-file.** On `--sample-only` the trajectory is derived once, in
+  flight, and cannot be re-joined afterwards.
 
-Due, e nessuno correggibile a posteriori:
+Hence: the **cell directory is the archivable unit** (steps-file, meta,
+report, argv, cost, decision). Without its steps-file a report cannot be
+re-analysed, because the trajectory inside it is already joined and a join
+defect is no longer diagnosable.
 
-- **La finestra di campionamento.** Dimensionata dallo span di una traiettoria
-  di calibrazione misurata sul nodo, per cella (span + tool wall della cella)
-  × margine. Non una finestra per lo sweep: a 5,0 s/tool la traiettoria è ~14s
-  più lunga che a 0,2s.
-- **Lo steps-file.** Su `--sample-only` la traiettoria si deriva una volta
-  sola, in volo, e non è ri-joinabile dopo.
+Hence also: the **price is derived cell by cell on the node**, never at the
+end of the campaign. That is the only moment at which an abstention by `cost`
+is still diagnosable.
+### Measured results — A10 session, 2026-08-04
 
-Da cui: la **directory di cella è l'unità archiviabile** (steps-file, meta,
-report, argv, costo, decisione). Senza lo steps-file il report non è
-ri-analizzabile, perché la traiettoria dentro è già joinata e un difetto di
-join non è più diagnosticabile.
+Lambda us-east-1, 1× A10 24GB PCIe at $1.29/h, Lambda Stack 24.04, vLLM
+0.23.0, Qwen2.5-7B-Instruct, `--enforce-eager`, inferscope 0.5.0. Evidence in
+`exp-results/20260804-a10-cost/`: sixteen cell directories, eight files each,
+with provenance (`nvidia-smi`, `pip freeze`, binary version, instance
+description) archived alongside.
 
-Da cui anche: il **prezzo si deriva cella per cella sul nodo**, mai a fine
-campagna. È l'unico momento in cui un'astensione di `cost` è ancora
-diagnosticabile.
+**Phase 1 — ADR-011 on real vLLM.** The first KV-cache reading against real
+vLLM in this repo; until now the claim existed only against the simulator.
 
-### Risultati misurati — sessione A10 del 2026-08-04
+| regime | hits_delta | queries_delta | realized | mean util. |
+|--------|-----------:|--------------:|---------:|-----------:|
+| H0     |          0 |       251,320 |    0.000 |        95% |
+| H2     |    203,456 |       235,209 |    0.865 |        52% |
 
-Lambda us-east-1, 1× A10 24GB PCIe a $1,29/h, Lambda Stack 24.04, vLLM
-0.23.0, Qwen2.5-7B-Instruct, `--enforce-eager`, inferscope 0.5.0.
-Evidenza in `exp-results/20260804-a10-cost/`: sedici directory di cella,
-otto file ciascuna, provenienza (`nvidia-smi`, `pip freeze`, versione
-binario, descrizione istanza) archiviata accanto.
+H0 gives exactly zero by construction — disjoint prefixes, no reuse possible —
+and H2 realises 0.865. The two regimes separate by 0.865 in absolute terms.
 
-**Fase 1 — ADR-011 su vLLM reale.** Prima lettura KV-cache su vLLM vero in
-questo repo; finora il claim esisteva solo su simulatore.
+Declared limit: the H0 cell ran for 115.7s against a 90s window (129%
+filled), so its energy is truncated. The hit-rate assert is untouched by this
+— hits and queries come from the Prometheus scrape before and after the cell,
+not from the window — but **no tok/J should be derived from H0**.
 
-| regime | hits_delta | queries_delta | realized | util. media |
-|--------|-----------:|--------------:|---------:|------------:|
-| H0     |          0 |       251.320 |    0,000 |         95% |
-| H2     |    203.456 |       235.209 |    0,865 |         52% |
+An incidental finding, not sought: H2 runs at 52% GPU utilisation against
+H0's 95%. With a warm cache the GPU does less work for the same volume of
+tokens, which is part of why the packing bound is interesting.
 
-H0 dà zero esatto per costruzione — prefissi disgiunti, nessun riuso
-possibile — e H2 realizza 0,865. I due regimi si separano di 0,865 in
-valore assoluto.
+### The curve
 
-Limite dichiarato: la cella H0 è durata 115,7s contro una finestra di 90s
-(129% riempito), quindi la sua energia è troncata. L'assert sull'hit-rate
-non ne è toccato — hits e queries vengono dallo scrape Prometheus prima e
-dopo la cella, non dalla finestra — ma **nessun tok/J va derivato da H0**.
-
-Nota collaterale non cercata: H2 gira al 52% di utilizzazione GPU contro
-il 95% di H0. Con la cache calda la GPU lavora meno per lo stesso volume
-di token, il che è parte del motivo per cui il packing bound è
-interessante.
-
-### La curva
-
-Quindici celle, quattro latenze × tre repliche a seed dichiarati, più tre
-celle di dispersione a CV 0,5. Riempimento finestra fra 83% e 87% su tutte
-(intervallo di guardia 60-90%). `gaps = 0,00%` dello span ovunque:
-l'overhead di framework fra step è sotto la risoluzione.
+Fifteen cells: four latencies × three replicas at declared seeds, plus three
+dispersion cells at CV 0.5. Window fill between 83% and 87% on all of them
+(guard interval 60-90%). `gaps = 0.00%` of span everywhere: the framework
+overhead between steps is below the resolution.
 
 | tool latency | f_nongen | packing bound | $/M token (span) |
 |-------------:|---------:|--------------:|-----------------:|
-| 0,2 s        |    2,30% |          1,02 |          $12,16  |
-| 0,5 s        |    5,55% |          1,06 |          $12,62  |
-| 2,0 s        |   19,01% |          1,23 |          $14,72  |
-| 5,0 s        |   37,01% |          1,59 |          $18,91  |
+| 0.2 s        |    2.30% |          1.02 |          $12.16  |
+| 0.5 s        |    5.55% |          1.06 |          $12.62  |
+| 2.0 s        |   19.01% |          1.23 |          $14.72  |
+| 5.0 s        |   37.01% |          1.59 |          $18.91  |
 
-Lo span LLM resta **costante a 25,5s** su tutte e quindici le celle: solo
-il termine aggiunto si muove, che è la condizione perché la curva sia
-leggibile e la ragione per cui il braccio di misura ha struttura fissa.
+The LLM span holds **constant at 25.5s** across all fifteen cells: only the
+added term moves, which is the condition for the curve to be readable and the
+reason the measurement arm has fixed structure.
+### The cost of generating does not move: what you pay for is the waiting
 
-### Il costo di generazione non si muove: si paga l'attesa
+The figure that makes the curve hard to argue with is the per-cell
+decomposition of the price, at the declared rate of $1.29/h:
 
-Il dato che rende la curva difficile da contestare è la scomposizione del
-prezzo per cella, a rate dichiarato $1,29/h:
+| tool latency | generating cost | tool cost  | ratio |
+|-------------:|----------------:|-----------:|------:|
+| 0.2 s        |       $0.009127 | $0.000215  |    1× |
+| 0.5 s        |       $0.009155 | $0.000538  |  2.5× |
+| 2.0 s        |       $0.009158 | $0.002150  |   10× |
+| 5.0 s        |       $0.009147 | $0.005375  |   25× |
 
-| tool latency | costo generazione | costo tool | rapporto |
-|-------------:|------------------:|-----------:|---------:|
-| 0,2 s        |        $0,009127  | $0,000215  |      1× |
-| 0,5 s        |        $0,009155  | $0,000538  |    2,5× |
-| 2,0 s        |        $0,009158  | $0,002150  |     10× |
-| 5,0 s        |        $0,009147  | $0,005375  |     25× |
+The cost of generating is **flat at $0.00915 across all fifteen cells** — the
+same 768 tokens, the same GPU, the same model. All of the price growth, +55%
+from $12.16 to $18.91 per M token, is time during which the GPU is allocated
+and not generating.
 
-Il costo di generazione è **costante a $0,00915 su tutte e quindici le
-celle** — stessi 768 token, stessa GPU, stesso modello. Tutta la crescita
-del prezzo, +55% da $12,16 a $18,91 per M token, è tempo in cui la GPU è
-allocata e non genera.
+### A reading constraint on the $/M token figure
 
-### Un vincolo di lettura sul $/M token
+The `$/M gen tokens` figure `inferscope cost` prints is computed **over the
+sampling window**, not over the trajectory span. The difference is not
+academic: the three CV 0.5 cells share the same 38s window and print
+$17.7069 / $17.7068 / $17.7068 — indistinguishable — while their `f_nongen`
+differs by 4.09 points.
 
-Il `$/M gen tokens` che `inferscope cost` stampa è calcolato **sulla
-finestra di campionamento**, non sullo span della traiettoria. La
-differenza non è accademica: le tre celle a CV 0,5 condividono la stessa
-finestra da 38s e stampano $17,7069 / $17,7068 / $17,7068, cioè
-indistinguibili, mentre il loro `f_nongen` varia di 4,09 punti.
+The window is an instrument parameter we chose. Therefore:
 
-La finestra è un parametro strumentale scelto da noi. Quindi:
+- the figures in the table above are recomputed **over the span**, which is
+  the only form comparable across cells and defensible in review;
+- the window-based `$/M` remains valid as the cost of a rental interval
+  actually occupied, but it is **not** a list price and must not be presented
+  as one;
+- the `generating` / `in tools` split that `cost` prints is by contrast
+  instrument-independent, and indeed reproduces the measured `f_nongen`
+  exactly (20.7% / 19.6% / 16.6% across the three CV cells).
 
-- le cifre della tabella sopra sono ricalcolate **sullo span**, ed è
-  l'unica forma confrontabile fra celle e difendibile in review;
-- il `$/M` su finestra resta valido come costo di un intervallo di
-  noleggio realmente occupato, ma **non** è un prezzo di listino e non va
-  presentato come tale;
-- la ripartizione `generating` / `in tools` che `cost` stampa è invece
-  indipendente dallo strumento, e infatti riproduce esattamente i
-  `f_nongen` misurati (20,7% / 19,6% / 16,6% sulle tre celle CV).
+**Correct headline**: not "$14.72 per M token", but *19.0% of the attributed
+cost is paid while the GPU sits idle on tools, rising to 37.0% at 5 s per
+tool*.
 
-**Headline corretta**: non "$14,72 per M token", ma *il 19,0% del costo
-attribuito si paga mentre la GPU è ferma sui tool, e sale al 37,0% a 5
-s/tool*.
+### The two policies, tested
 
-### Le due politiche, alla prova
+**P1 = 0.000s across all fifteen cells.** The longest tool segment in the
+sweep is 5.0s against a measured re-entry price of ~18s: no segment repays
+the release. The obvious policy — free the GPU while the agent waits on a
+tool — is falsified by the measurement across the whole latency interval the
+source covers. Break-even would fall beyond 18 s per tool, outside the
+published interval (Fig. 7, tools 2-29% of the time).
+**P2, packing bound**: from 1.02 to 1.59 across the interval. It remains an
+upper bound under declared non-interference.
 
-**P1 = 0,000s su tutte e quindici le celle.** Il segmento tool più lungo
-dello sweep è 5,0s contro un prezzo di rientro misurato di ~18s: nessun
-segmento ripaga il rilascio. La politica ovvia — liberare la GPU mentre
-l'agente aspetta uno strumento — è falsificata dalla misura in tutto
-l'intervallo di latenza coperto dalla fonte. Il punto di pareggio
-cadrebbe oltre i 18 s/tool, fuori dall'intervallo pubblicato (Fig. 7,
-tool 2-29% del tempo).
+### The dispersion branch, and what it demonstrated
 
-**P2, packing bound**: da 1,02 a 1,59 sull'intervallo. Resta un upper
-bound sotto non-interferenza dichiarata.
+The design argued that the tool-latency CV does not move the curve but does
+move the reliability of the bound. The measurement quantifies it.
 
-### Il ramo dispersione, e cosa ha dimostrato
+| cells                | mean f_nongen | spread across replicas |
+|----------------------|--------------:|-----------------------:|
+| 2.0 s/tool, CV 0     |        19.01% |          **0.006 pt** |
+| 2.0 s/tool, CV 0.5   |        18.95% |          **4.09 pt**  |
 
-Il disegno aveva argomentato che il CV della tool latency non muove la
-curva ma muove l'affidabilità del bound. La misura lo quantifica.
+Mean unchanged within 0.06 points, spread **three orders of magnitude**
+larger. The packing bound at 2.0 s per tool is not 1.23: it is **1.23 ranging
+1.20-1.26 under CV 0.5**, and on price that translates to $15.02 / $14.81 /
+$14.30 per M token against ±0.03% for the deterministic cells.
 
-| celle | media f_nongen | escursione fra repliche |
-|-------|---------------:|------------------------:|
-| 2,0 s/tool, CV 0   |     19,01% |            **0,006 pt** |
-| 2,0 s/tool, CV 0,5 |     18,95% |            **4,09 pt**  |
+Without those three cells we would have published a limit; with them we
+publish a limit and its dispersion. They cost three cells out of fifteen.
 
-Media invariata entro 0,06 punti, escursione **tre ordini di grandezza**
-più grande. Il packing bound a 2,0 s/tool non è 1,23: è **1,23 con
-escursione 1,20-1,26 sotto CV 0,5**, e sul prezzo si traduce in $15,02 /
-$14,81 / $14,30 per M token contro ±0,03% delle celle deterministiche.
+It also serves as a check on the measurement arm: at CV 0 the three replicas
+give spans identical to the tenth (27.8 / 32.3 / 41.3 s by latency), so the
+dispersion observed at CV 0.5 comes from the sampling and not from the engine.
 
-Senza quelle tre celle avremmo pubblicato un limite; con esse pubblichiamo
-un limite e la sua dispersione. Sono costate tre celle su quindici.
+### Session cost
 
-Vale anche come verifica del braccio di misura: a CV 0 le tre repliche
-danno span identico al decimo (27,8 / 32,3 / 41,3 s per latenza), quindi
-la dispersione osservata a CV 0,5 viene dal campionamento e non dal
-motore.
+~25 minutes of node, ~$0.55 against a declared cap of $1.94. Node time was
+never the constraint: the full sweep occupies ~10 minutes of window. The
+constraint was cells, and none was wasted.
 
-### Costo della sessione
+An earlier session the same day was abandoned after ~$0.90 on four
+environmental obstacles — the prefix tokenizer not cached (the generator asks
+for the prefix's, not `--model`), `PATH` without `~/venv/bin` and therefore
+`ninja` not found, an engine started by hand holding the port the
+orchestrator's own engine needed, and a flag that does not exist in vLLM
+0.23.0. None was a design defect; all four are now entries in
+`CHECKLIST-A10-COST.md` with their remedy, and that is why the second session
+ran without interruption.
+### What this phase does NOT prove
 
-~25 minuti di nodo, ~$0,55 contro un cap dichiarato di $1,94. Il tempo di
-nodo non è stato il vincolo in nessun momento: lo sweep completo occupa
-~10 minuti di finestra. Il vincolo erano le celle, e nessuna è stata
-sprecata.
-
-Una sessione precedente, lo stesso giorno, era stata interrotta dopo ~$0,90
-su quattro ostacoli ambientali — tokenizer del prefisso non in cache
-(il generatore chiede quello del prefisso, non `--model`), `PATH` senza
-`~/venv/bin` e quindi `ninja` non trovato, un engine acceso a mano che
-occupava la porta dell'engine dell'orchestratore, un flag inesistente in
-vLLM 0.23.0. Nessuno era un difetto di disegno; tutti e quattro sono ora
-voci di `CHECKLIST-A10-COST.md` con il loro rimedio, ed è il motivo per cui
-la seconda sessione è filata senza interruzioni.
-
-### Cosa questa fase NON prova
-
-- Non è traffico agentico vero (vale il limite già dichiarato sopra: è la
-  firma della forma, ancorata dal braccio agentico).
-- Il packing bound è un limite superiore sotto non-interferenza **dichiarata**:
-  non è una misura di throughput sotto concorrenza reale.
-- P1 = 0 vale nel dominio dichiarato (single-tenant, granularità oraria del
-  noleggio). Non è un enunciato generale sull'inutilità del rilascio.
-- I tok/J non sono confrontabili con la matrice H100 di luglio: GPU e modello
-  diversi. Il confronto è interno alla sessione.
+- It is not real agentic traffic (the limit declared above applies: it is the
+  signature of the shape, anchored by the agentic arm).
+- The packing bound is an upper bound under **declared** non-interference: it
+  is not a throughput measurement under real concurrency.
+- P1 = 0 holds in the declared domain (single-tenant, hourly rental
+  granularity). It is not a general statement about the futility of releasing.
+- The tok/J are not comparable with July's H100 matrix: different GPU,
+  different model. The comparison is internal to the session.
 
 ## Fuori scope
 
