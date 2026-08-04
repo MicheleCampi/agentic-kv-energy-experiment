@@ -49,8 +49,12 @@ export EXP_CALIB_REPS=3
 # se la calibrazione mostra che H0 e H2 non si separano.
 export EXP_REGIMES="H0,H2"
 export EXP_REPS=3
-export EXP_BUDGET_HOURS_MAX=2       # 1x A10 ~$0.75/h -> cap ~$1.50,
-                                    # ampiamente sotto il tetto 30 EUR
+export EXP_BUDGET_HOURS_MAX=1.5      # 1x A10 24GB PCIe a $1.29/h (listino
+                                    # Lambda 2026-08-04) -> cap ~$1.94,
+                                    # sotto il tetto 30 EUR. Preventivo
+                                    # 45-60 min: i 30 di margine coprono un
+                                    # pip install lento o una diagnosi senza
+                                    # scelte affrettate a tassametro acceso.
 
 export EXP_OUT_DIR="$HOME/exp-results/$(date +%Y%m%d)-a10-cost"
 # --- Fase 2: campagna costo (ADR-013 + ADR-015) ---
@@ -80,6 +84,10 @@ export EXP_COST_REENTRY_SECS=18
 
 # Base di prezzo: una sola per derivazione (ADR-015 D2). Occupancy, perche'
 # il nodo e' noleggiato a ore e l'energia e' gia' dentro il prezzo.
-export EXP_COST_USD_PER_HOUR=0.75
+# Prezzo EFFETTIVO dell'istanza, non stimato: Lambda 1x A10 24GB PCIe,
+# 30 vCPU / 200 GiB / 1.4 TiB, listino al 2026-08-04. Il $/M token
+# derivato da `inferscope cost` moltiplica QUESTO numero: un rate
+# diverso da quello pagato produrrebbe una cifra plausibile e falsa.
+export EXP_COST_USD_PER_HOUR=1.29
 
 echo "env pinned: vllm=$EXP_VLLM_VERSION inferscope=$EXP_INFERSCOPE_VERSION model=$EXP_MODEL regimes=$EXP_REGIMES"
