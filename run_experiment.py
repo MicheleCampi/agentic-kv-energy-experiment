@@ -29,6 +29,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "driver"))
+from inferscope_contract import check_inferscope, ContractError  # noqa: E402
+
 REPO = Path(__file__).resolve().parent
 
 # In a disaggregated P/D topology, per-pod counters MUST be scraped per pod
@@ -366,58 +369,14 @@ def main():
         scrape = lambda: scrape_local_prefix_counters(args.metrics_url)
         out_dir = Path(args.out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        # F9: contract check BEFORE paying engine readiness. The binary
-        # identity is version+commit+FEATURES: a build without gpu-nvidia
-        # hides --gpu and NVML never runs (silent zero-energy campaign,
-        # root-caused 2026-07-10).
-        hp = subprocess.run([args.inferscope_bin, "--help"],
-                            capture_output=True, text=True)
-        # inferscope 0.5.0 prints --help on STDERR with exit 2 (clap
-        # DisplayHelpOnMissingArgumentOrSubcommand: the root command
-        # takes options AND subcommands, so bare --help is an
-        # incomplete use). Reading stdout alone made every check below
-        # fail on a CORRECT binary, and would have aborted a healthy
-        # session on a paid node (found 2026-08-02, dress rehearsal).
-        # The exit code is not the signal; the help text is.
-        hp_text = hp.stdout + hp.stderr
-        if not hp_text.strip():
-            sys.exit("inferscope contract check FAILED: --help gave no "
-                     f"output on either stream (exit {hp.returncode}).")
-        if "--gpu" not in hp_text:
-            sys.exit("inferscope contract check FAILED: --gpu absent from "
-                     "--help (binary built without gpu-nvidia feature?). "
-                     "Rebuild: cargo build --release --features gpu-nvidia")
-        # ADR-014 makes --engine mandatory whenever --metrics-endpoint is
-        # given. The dummy probe below omits the metrics flag, so it never
-        # exercised that requirement: the July harness would have died at
-        # the first real cell against inferscope v0.5 (found 2026-08-02,
-        # node off).
-        if "--engine" not in hp_text:
-            sys.exit("inferscope contract check FAILED: --engine absent from "
-                     "--help; this harness passes --metrics-endpoint, which "
-                     "requires it (ADR-014).")
-        # ADR-015 cost derivation is a subcommand over the written report.
-        # Without it the campaign produces reports nothing can price.
-        if "cost" not in hp_text:
-            sys.exit("inferscope contract check FAILED: `cost` subcommand "
-                     "absent from --help (binary predates ADR-015).")
-        probe = subprocess.run(
-            [args.inferscope_bin, "--sample-only", "--pid", str(os.getpid()),
-             "--duration-secs", "1",
-             # Exercise the flags the cells actually use, against an
-             # endpoint that will not answer: the scrape is best-effort,
-             # so an unreachable target is fine and argument rejection is
-             # not.
-             "--metrics-endpoint", "http://127.0.0.1:1/metrics",
-             "--engine", "vllm", "--model", args.model,
-             "--json"],
-            capture_output=True, text=True)
+        # F9: contract check BEFORE paying engine readiness. Extracted
+        # to driver/inferscope_contract.py (2026-08-04) so the cost
+        # campaign asserts the SAME surface: two copies of these
+        # thresholds would diverge the day inferscope changes one.
         try:
-            json.loads(probe.stdout)
-        except Exception:
-            sys.exit("inferscope contract check FAILED: dummy --sample-only "
-                     "with the cells' own flags did not emit parseable JSON "
-                     f"on stdout. stderr: {probe.stderr[:300]}")
+            check_inferscope(args.inferscope_bin, args.model)
+        except ContractError as e:
+            sys.exit(f"inferscope contract check FAILED: {e}")
         engine_proc, engine_cmd = launch_engine(args)
         print(f"[gpu ] engine launched pid={engine_proc.pid}, waiting ready "
               f"(timeout {args.ready_timeout}s)")
