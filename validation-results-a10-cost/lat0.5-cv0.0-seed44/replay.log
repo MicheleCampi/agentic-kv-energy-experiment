@@ -1,0 +1,5 @@
+steps: 7 (llm_call=4, tool=3)
+overlapping consecutive segments: 0
+non-positive spans: 0
+span: 27.1s (tool wall 1.5s measured, 0.5s/tool requested, 5.5% of span)
+meta: /home/ubuntu/exp-results/20260804-a10-cost/lat0.5-cv0.0-seed44/steps.jsonl.meta.json

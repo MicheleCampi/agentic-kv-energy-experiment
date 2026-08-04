@@ -1,0 +1,10 @@
+re-entry price C = 18.0s
+
+report                                span     llm    tool  f_nongen  packing   P1 save
+---------------------------------------------------------------------------------------
+inferscope.json                    31.565s 25.563s  6.001s    19.01%     1.23    0.000s
+
+integrity:
+  inferscope.json                    window/span=1.20x, gaps=0.00% of span
+
+wrote /home/ubuntu/exp-results/20260804-a10-cost/lat2.0-cv0.0-seed42/decision.json

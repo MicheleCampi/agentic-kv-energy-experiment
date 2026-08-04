@@ -1,0 +1,23 @@
+=== cost attribution (derived, not measured) ===
+basis:            occupancy (node rented by wall-clock time; energy already priced in)
+declared rate:    $1.2900/hour
+
+run window:       $0.011449 at $1.2900/hour
+  attributed:     $0.009353
+    generating:   $0.009138 (97.7% of attributed)
+    in tools:     $0.000215 (2.3% of attributed)
+  unattributed:   $0.002096 (18.3% of run)
+per M gen tokens: $14.9074 at $1.2900/hour (over the whole run window)
+
+per-step (7 steps, at $1.2900/hour):
+  step    1  llmcall   $0.002352  $13.8330/Mtok
+  step    2  tool      $0.000072  -
+  step    3  llmcall   $0.002259  $10.9129/Mtok
+  step    4  tool      $0.000072  -
+  step    5  llmcall   $0.002262  $12.7785/Mtok
+  step    6  tool      $0.000072  -
+  step    7  llmcall   $0.002265  $10.9966/Mtok
+
+Single-tenant profiling run. The run window is not the invoice:
+provisioning, model load and post-run idle are billed and are not
+in it (ADR-015 D7).

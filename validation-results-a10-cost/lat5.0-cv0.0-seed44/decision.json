@@ -1,0 +1,24 @@
+[
+  {
+    "n_steps": 7,
+    "n_llm": 4,
+    "n_tool": 3,
+    "span_s": 40.511281727,
+    "llm_s": 25.510103494,
+    "tool_s": 15.000417069,
+    "gap_s": 0.000761164,
+    "gap_share": 1.8788938970862e-05,
+    "f_nongen": 0.37029631237270877,
+    "packing_bound": 1.5880485054295563,
+    "p1_segments_eligible": 0,
+    "p1_saving_s": 0.0,
+    "p1_saving_share": 0.0,
+    "reconciliation_residual_ns": 0,
+    "overlapping_pairs": 0,
+    "dropped_steps": 0,
+    "run_duration_ns": 48950645329,
+    "window_excess_factor": 1.2083213179694416,
+    "mean_tool_s": 5.000139023,
+    "report": "inferscope.json"
+  }
+]

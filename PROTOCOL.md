@@ -331,6 +331,146 @@ Da cui anche: il **prezzo si deriva cella per cella sul nodo**, mai a fine
 campagna. È l'unico momento in cui un'astensione di `cost` è ancora
 diagnosticabile.
 
+### Risultati misurati — sessione A10 del 2026-08-04
+
+Lambda us-east-1, 1× A10 24GB PCIe a $1,29/h, Lambda Stack 24.04, vLLM
+0.23.0, Qwen2.5-7B-Instruct, `--enforce-eager`, inferscope 0.5.0.
+Evidenza in `exp-results/20260804-a10-cost/`: sedici directory di cella,
+otto file ciascuna, provenienza (`nvidia-smi`, `pip freeze`, versione
+binario, descrizione istanza) archiviata accanto.
+
+**Fase 1 — ADR-011 su vLLM reale.** Prima lettura KV-cache su vLLM vero in
+questo repo; finora il claim esisteva solo su simulatore.
+
+| regime | hits_delta | queries_delta | realized | util. media |
+|--------|-----------:|--------------:|---------:|------------:|
+| H0     |          0 |       251.320 |    0,000 |         95% |
+| H2     |    203.456 |       235.209 |    0,865 |         52% |
+
+H0 dà zero esatto per costruzione — prefissi disgiunti, nessun riuso
+possibile — e H2 realizza 0,865. I due regimi si separano di 0,865 in
+valore assoluto.
+
+Limite dichiarato: la cella H0 è durata 115,7s contro una finestra di 90s
+(129% riempito), quindi la sua energia è troncata. L'assert sull'hit-rate
+non ne è toccato — hits e queries vengono dallo scrape Prometheus prima e
+dopo la cella, non dalla finestra — ma **nessun tok/J va derivato da H0**.
+
+Nota collaterale non cercata: H2 gira al 52% di utilizzazione GPU contro
+il 95% di H0. Con la cache calda la GPU lavora meno per lo stesso volume
+di token, il che è parte del motivo per cui il packing bound è
+interessante.
+
+### La curva
+
+Quindici celle, quattro latenze × tre repliche a seed dichiarati, più tre
+celle di dispersione a CV 0,5. Riempimento finestra fra 83% e 87% su tutte
+(intervallo di guardia 60-90%). `gaps = 0,00%` dello span ovunque:
+l'overhead di framework fra step è sotto la risoluzione.
+
+| tool latency | f_nongen | packing bound | $/M token (span) |
+|-------------:|---------:|--------------:|-----------------:|
+| 0,2 s        |    2,30% |          1,02 |          $12,16  |
+| 0,5 s        |    5,55% |          1,06 |          $12,62  |
+| 2,0 s        |   19,01% |          1,23 |          $14,72  |
+| 5,0 s        |   37,01% |          1,59 |          $18,91  |
+
+Lo span LLM resta **costante a 25,5s** su tutte e quindici le celle: solo
+il termine aggiunto si muove, che è la condizione perché la curva sia
+leggibile e la ragione per cui il braccio di misura ha struttura fissa.
+
+### Il costo di generazione non si muove: si paga l'attesa
+
+Il dato che rende la curva difficile da contestare è la scomposizione del
+prezzo per cella, a rate dichiarato $1,29/h:
+
+| tool latency | costo generazione | costo tool | rapporto |
+|-------------:|------------------:|-----------:|---------:|
+| 0,2 s        |        $0,009127  | $0,000215  |      1× |
+| 0,5 s        |        $0,009155  | $0,000538  |    2,5× |
+| 2,0 s        |        $0,009158  | $0,002150  |     10× |
+| 5,0 s        |        $0,009147  | $0,005375  |     25× |
+
+Il costo di generazione è **costante a $0,00915 su tutte e quindici le
+celle** — stessi 768 token, stessa GPU, stesso modello. Tutta la crescita
+del prezzo, +55% da $12,16 a $18,91 per M token, è tempo in cui la GPU è
+allocata e non genera.
+
+### Un vincolo di lettura sul $/M token
+
+Il `$/M gen tokens` che `inferscope cost` stampa è calcolato **sulla
+finestra di campionamento**, non sullo span della traiettoria. La
+differenza non è accademica: le tre celle a CV 0,5 condividono la stessa
+finestra da 38s e stampano $17,7069 / $17,7068 / $17,7068, cioè
+indistinguibili, mentre il loro `f_nongen` varia di 4,09 punti.
+
+La finestra è un parametro strumentale scelto da noi. Quindi:
+
+- le cifre della tabella sopra sono ricalcolate **sullo span**, ed è
+  l'unica forma confrontabile fra celle e difendibile in review;
+- il `$/M` su finestra resta valido come costo di un intervallo di
+  noleggio realmente occupato, ma **non** è un prezzo di listino e non va
+  presentato come tale;
+- la ripartizione `generating` / `in tools` che `cost` stampa è invece
+  indipendente dallo strumento, e infatti riproduce esattamente i
+  `f_nongen` misurati (20,7% / 19,6% / 16,6% sulle tre celle CV).
+
+**Headline corretta**: non "$14,72 per M token", ma *il 19,0% del costo
+attribuito si paga mentre la GPU è ferma sui tool, e sale al 37,0% a 5
+s/tool*.
+
+### Le due politiche, alla prova
+
+**P1 = 0,000s su tutte e quindici le celle.** Il segmento tool più lungo
+dello sweep è 5,0s contro un prezzo di rientro misurato di ~18s: nessun
+segmento ripaga il rilascio. La politica ovvia — liberare la GPU mentre
+l'agente aspetta uno strumento — è falsificata dalla misura in tutto
+l'intervallo di latenza coperto dalla fonte. Il punto di pareggio
+cadrebbe oltre i 18 s/tool, fuori dall'intervallo pubblicato (Fig. 7,
+tool 2-29% del tempo).
+
+**P2, packing bound**: da 1,02 a 1,59 sull'intervallo. Resta un upper
+bound sotto non-interferenza dichiarata.
+
+### Il ramo dispersione, e cosa ha dimostrato
+
+Il disegno aveva argomentato che il CV della tool latency non muove la
+curva ma muove l'affidabilità del bound. La misura lo quantifica.
+
+| celle | media f_nongen | escursione fra repliche |
+|-------|---------------:|------------------------:|
+| 2,0 s/tool, CV 0   |     19,01% |            **0,006 pt** |
+| 2,0 s/tool, CV 0,5 |     18,95% |            **4,09 pt**  |
+
+Media invariata entro 0,06 punti, escursione **tre ordini di grandezza**
+più grande. Il packing bound a 2,0 s/tool non è 1,23: è **1,23 con
+escursione 1,20-1,26 sotto CV 0,5**, e sul prezzo si traduce in $15,02 /
+$14,81 / $14,30 per M token contro ±0,03% delle celle deterministiche.
+
+Senza quelle tre celle avremmo pubblicato un limite; con esse pubblichiamo
+un limite e la sua dispersione. Sono costate tre celle su quindici.
+
+Vale anche come verifica del braccio di misura: a CV 0 le tre repliche
+danno span identico al decimo (27,8 / 32,3 / 41,3 s per latenza), quindi
+la dispersione osservata a CV 0,5 viene dal campionamento e non dal
+motore.
+
+### Costo della sessione
+
+~25 minuti di nodo, ~$0,55 contro un cap dichiarato di $1,94. Il tempo di
+nodo non è stato il vincolo in nessun momento: lo sweep completo occupa
+~10 minuti di finestra. Il vincolo erano le celle, e nessuna è stata
+sprecata.
+
+Una sessione precedente, lo stesso giorno, era stata interrotta dopo ~$0,90
+su quattro ostacoli ambientali — tokenizer del prefisso non in cache
+(il generatore chiede quello del prefisso, non `--model`), `PATH` senza
+`~/venv/bin` e quindi `ninja` non trovato, un engine acceso a mano che
+occupava la porta dell'engine dell'orchestratore, un flag inesistente in
+vLLM 0.23.0. Nessuno era un difetto di disegno; tutti e quattro sono ora
+voci di `CHECKLIST-A10-COST.md` con il loro rimedio, ed è il motivo per cui
+la seconda sessione è filata senza interruzioni.
+
 ### Cosa questa fase NON prova
 
 - Non è traffico agentico vero (vale il limite già dichiarato sopra: è la

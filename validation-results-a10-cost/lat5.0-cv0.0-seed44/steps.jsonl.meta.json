@@ -1,0 +1,24 @@
+{
+ "arm": "replay",
+ "base_url": "http://127.0.0.1:8000/v1",
+ "max_tokens": 192,
+ "model": "Qwen/Qwen2.5-7B-Instruct",
+ "n_llm_call": 4,
+ "n_llm_planned": 4,
+ "n_steps": 7,
+ "n_tool": 3,
+ "n_tool_planned": 3,
+ "observed_span_s": 40.511281727,
+ "seed": 44,
+ "steps_file": "/home/ubuntu/exp-results/20260804-a10-cost/lat5.0-cv0.0-seed44/steps.jsonl",
+ "t_end_unix_ns": 1785874399113782464,
+ "t_start_unix_ns": 1785874358602500737,
+ "tool_latency_cv": 0.0,
+ "tool_latency_realised_s": [
+  5.0,
+  5.0,
+  5.0
+ ],
+ "tool_latency_s": 5.0,
+ "tool_wall_s": 15.000417069
+}

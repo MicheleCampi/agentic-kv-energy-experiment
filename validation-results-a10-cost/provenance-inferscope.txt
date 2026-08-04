@@ -1,0 +1,2 @@
+inferscope: inferscope 0.5.0
+

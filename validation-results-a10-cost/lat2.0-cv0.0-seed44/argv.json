@@ -1,0 +1,59 @@
+{
+ "replay": [
+  "/home/ubuntu/agentic-kv-energy-experiment/driver/.venv/bin/python",
+  "/home/ubuntu/agentic-kv-energy-experiment/driver/run_replay.py",
+  "--base-url",
+  "http://127.0.0.1:8000/v1",
+  "--model",
+  "Qwen/Qwen2.5-7B-Instruct",
+  "--steps-file",
+  "/home/ubuntu/exp-results/20260804-a10-cost/lat2.0-cv0.0-seed44/steps.jsonl",
+  "--tool-latency-s",
+  "2.0",
+  "--tool-latency-cv",
+  "0.0",
+  "--n-llm",
+  "4",
+  "--n-tool",
+  "3",
+  "--max-tokens",
+  "192",
+  "--seed",
+  "44"
+ ],
+ "inferscope": [
+  "/home/ubuntu/inferscope-bin/inferscope",
+  "--sample-only",
+  "--pid",
+  "4498",
+  "--duration-secs",
+  "38",
+  "--steps-file",
+  "/home/ubuntu/exp-results/20260804-a10-cost/lat2.0-cv0.0-seed44/steps.jsonl",
+  "--gpu",
+  "--json",
+  "--metrics-endpoint",
+  "http://127.0.0.1:8000/metrics",
+  "--engine",
+  "vllm",
+  "--model",
+  "Qwen/Qwen2.5-7B-Instruct"
+ ],
+ "cost": [
+  "/home/ubuntu/inferscope-bin/inferscope",
+  "cost",
+  "--report",
+  "/home/ubuntu/exp-results/20260804-a10-cost/lat2.0-cv0.0-seed44/inferscope.json",
+  "--usd-per-hour",
+  "1.29"
+ ],
+ "decision": [
+  "/home/ubuntu/agentic-kv-energy-experiment/driver/.venv/bin/python",
+  "/home/ubuntu/agentic-kv-energy-experiment/driver/analyze_cost_decision.py",
+  "/home/ubuntu/exp-results/20260804-a10-cost/lat2.0-cv0.0-seed44/inferscope.json",
+  "--reentry-secs",
+  "18.0",
+  "--json-out",
+  "/home/ubuntu/exp-results/20260804-a10-cost/lat2.0-cv0.0-seed44/decision.json"
+ ]
+}

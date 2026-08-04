@@ -1,0 +1,1 @@
+Lambda us-east-1 (Virginia), Lambda Stack 24.04, 1x A10 24GB PCIe, 30 vCPU, 222 GiB RAM, $1.29/h, 2026-08-04
