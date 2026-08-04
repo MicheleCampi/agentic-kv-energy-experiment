@@ -190,6 +190,158 @@ Generatore + path di cattura sviluppati e validati su `llm-d-inference-sim`
 (2) il path di cattura produce record completi. Output in `sim-results/`.
 Solo dopo validazione in simulazione si passa al nodo GPU per la cattura energia.
 
+## Asse terziario: costo per traiettoria agentica (fase 2)
+
+La matrice hit-rate misura tok/J al variare del riuso di cache. Questa fase
+misura una cosa diversa sullo stesso nodo: **quanta parte del prezzo di una
+GPU si paga mentre quella GPU non sta generando**, al variare della latenza
+degli strumenti che l'agente chiama.
+
+Le due fasi non si uniscono in un orchestratore solo. ADR-013 vuole **una**
+traiettoria in volo per attribuire energia per-step; la matrice vuole N
+sessioni concorrenti per muovere l'hit-rate. Sono forme incompatibili: due
+fasi sequenziali sullo stesso nodo, non un esperimento fattorializzato.
+
+### Il denominatore: span della traiettoria, non della finestra
+
+Decisione portante, e la misura che l'ha imposta.
+
+`f_nongen` = (Σ durate tool + Σ gap fra step consecutivi) / span.
+
+Lo **span è quello della traiettoria** — `last.end_elapsed_ns −
+first.start_elapsed_ns` — non `run_duration_ns`, che è lo span della finestra
+di campionamento. Le due definizioni sono entrambe difendibili sulla carta e
+differiscono di un ordine di grandezza sui dati reali.
+
+Evidenza: `~/inferscope/validation-results/adr-013-a10-vllm/report-20260721T193436.txt`
+(A10, Qwen2.5-7B, vLLM, tool 200 ms). Il campionamento inizia 3,878s prima
+del primo step e la finestra è 150s contro una traiettoria di 6,218s — 24×.
+Sulla stessa run: energia unattributed **91% della finestra**, tempo non
+generante **9,78% della traiettoria**.
+
+Se l'headline fosse "la frazione del costo pagata mentre la GPU non genera" e
+il denominatore fosse la finestra, il numero pubblicato sarebbe dominato da un
+artefatto di sovradimensionamento dello strumento. Con `EXP_WINDOW_MARGIN=1.2`
+il gonfiaggio resterebbe del 20% strutturale anche a finestra ben calibrata.
+
+`run_duration_ns` resta nell'analisi come **diagnostica di eccesso finestra**,
+dichiarata accanto al risultato, mai come denominatore. Un test pinna
+l'ancoraggio pubblicato (f_nongen 9,78%, packing bound 1,11).
+
+### Ancoraggio alla fonte
+
+La tabella di provenienza sopra dà `tempo LLM vs tool: LLM 71–98%, tool 2–29%`
+(Fig. 7, GAIA al massimo). È l'intervallo in cui `f_nongen` deve cadere perché
+la misura sia rappresentativa di traffico agentico reale: il 9,78% misurato il
+21/07 ci sta dentro, verso il basso. Lo sweep delle latenze è scelto per
+**coprire l'intervallo della fonte**, non per esplorare un range arbitrario.
+
+### Le due politiche, e quella che la misura falsifica
+
+Il braccio decisionale (`driver/analyze_cost_decision.py`) valuta due politiche
+di piattaforma sullo stesso report. Entrambe **adimensionali**, quindi
+indipendenti dal prezzo dichiarato: il $/M token viene separatamente da
+`inferscope cost` sul nodo, e le due letture non si contaminano.
+
+**P1 — rilascio per segmento.** Libera la GPU su ogni segmento tool più lungo
+del prezzo di rientro. Saving = Σ(d − C) sui segmenti con d > C, dove C è il
+cold start **misurato** in `vllm-coldstart-probe` (~18s, con il finding
+27s/96s che ne dichiara la varianza). `--reentry-secs` è obbligatorio senza
+default: il valore dev'essere visibile nel comando che ha prodotto i numeri.
+
+Sull'ancoraggio A10 del 21/07, P1 vale **0,000s**. È zero per costruzione:
+il segmento tool più lungo dello sweep è 5,0s contro ~18s di rientro. **La
+politica ovvia è falsificata dalla misura, e questo è il risultato da
+pubblicare** — non un esito negativo da nascondere. Il dominio del claim va
+dichiarato con esso: il risparmio da occupancy interrotta è reale solo se la
+GPU liberata serve altro, e su un noleggio a granularità oraria non risparmia
+nulla.
+
+**P2 — packing.** Il tempo non generante non si libera: si riempie. Bound di
+sovrapposizione `1/(1 − f_nongen)`, cioè quante traiettorie una GPU può
+ospitare prima che i segmenti generanti si contendano. Sull'ancoraggio: 1,11.
+È un **upper bound sotto non-interferenza dichiarata** — il batching reale
+cambia il throughput — e il limite viaggia accanto al numero, non dopo.
+
+### Sweep, repliche, dispersione
+
+La tool latency è un **parametro scelto da noi**: si pubblica la curva col
+crossover, non un punto. Quattro valori (0,2 / 0,5 / 2,0 / 5,0 s/tool)
+coprono due ordini di grandezza e l'intervallo della fonte.
+
+**Tre repliche per cella a seed dichiarati**, non una run. Con `max_tokens`
+fisso il seed non muove la struttura — muove il testo generato — quindi la
+dispersione fra repliche misura il jitter dell'engine sullo span LLM, che è
+il denominatore. Una run per cella pubblicherebbe un punto senza sapere se è
+distinguibile dal vicino.
+
+**Il CV della tool latency non è una seconda dimensione dello sweep.**
+`f_nongen` somma 3-5 durate e la media domina: la varianza non muove la curva.
+Quello che muove è l'**affidabilità del bound sotto concorrenza**. Quindi una
+sola cella dello sweep (2,0 s/tool) ripetuta a CV 0,5 — tre celle in più, e la
+differenza fra pubblicare un limite e pubblicare un limite con la sua
+dispersione. Distribuzione lognormale parametrizzata per media aritmetica e
+CV, che è l'unica forma in cui i due flag significano ciò che dicono; a CV 0
+il comportamento è bit-identico alle celle già validate.
+
+### Braccio di misura e braccio di ancoraggio
+
+Stessa conclusione della sezione "replay deterministico, non agente reale",
+raggiunta di nuovo per una misura diversa.
+
+Guidare lo sweep con il vero loop Deep Agents non funziona, e la misura lo
+dice: stesso prompt, stesso modello, temperature 0.0, tre run hanno dato span
+7,4s / 12,7s / 34,7s con 4-8 step. Il modello decide la forma della
+traiettoria, quindi numeratore e denominatore si muovono entrambi per ragioni
+scorrelate dal parametro che si sweeppa. Una curva costruita su quel braccio
+non sarebbe leggibile.
+
+`run_replay.py` fissa numero di chiamate LLM, numero di step tool e token
+generati per chiamata, e lascia la tool latency come unica variabile. Tre
+ripetizioni a 0,2 s/tool: span 11,1 / 10,9 / 11,0s — **dispersione 1,8%**
+contro il fattore 4,7 del braccio agentico.
+
+`run_trajectory.py` non è sostituito: **ancora** il replay. Girato alla stessa
+latenza sullo stesso nodo, mostra traiettorie reali che cadono nella regione
+che il replay descrive (31,5% contro 36,3% a 2,0 s/tool nella prova su
+llama.cpp, scarto spiegato da n_tool 2 contro 3). Due bracci, ciascuno prova
+ciò che può.
+
+Entrambi scrivono lo stesso formato attraverso lo stesso `StepsFileCallback` e
+passano gli stessi gate in `trajectory_gates.py`: un gate che differisse fra i
+bracci renderebbe inutili le celle di ancoraggio come evidenza.
+
+### Parametri irreversibili per cella
+
+Due, e nessuno correggibile a posteriori:
+
+- **La finestra di campionamento.** Dimensionata dallo span di una traiettoria
+  di calibrazione misurata sul nodo, per cella (span + tool wall della cella)
+  × margine. Non una finestra per lo sweep: a 5,0 s/tool la traiettoria è ~14s
+  più lunga che a 0,2s.
+- **Lo steps-file.** Su `--sample-only` la traiettoria si deriva una volta
+  sola, in volo, e non è ri-joinabile dopo.
+
+Da cui: la **directory di cella è l'unità archiviabile** (steps-file, meta,
+report, argv, costo, decisione). Senza lo steps-file il report non è
+ri-analizzabile, perché la traiettoria dentro è già joinata e un difetto di
+join non è più diagnosticabile.
+
+Da cui anche: il **prezzo si deriva cella per cella sul nodo**, mai a fine
+campagna. È l'unico momento in cui un'astensione di `cost` è ancora
+diagnosticabile.
+
+### Cosa questa fase NON prova
+
+- Non è traffico agentico vero (vale il limite già dichiarato sopra: è la
+  firma della forma, ancorata dal braccio agentico).
+- Il packing bound è un limite superiore sotto non-interferenza **dichiarata**:
+  non è una misura di throughput sotto concorrenza reale.
+- P1 = 0 vale nel dominio dichiarato (single-tenant, granularità oraria del
+  noleggio). Non è un enunciato generale sull'inutilità del rilascio.
+- I tok/J non sono confrontabili con la matrice H100 di luglio: GPU e modello
+  diversi. Il confronto è interno alla sessione.
+
 ## Fuori scope
 
 Replica della caratterizzazione task del paper (accuratezza, success rate).
