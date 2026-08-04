@@ -21,6 +21,7 @@ target regime.
 import argparse
 import json
 import random
+import sys
 import time
 import urllib.request
 from dataclasses import dataclass, asdict, field
@@ -237,11 +238,25 @@ def run(args) -> RunManifest:
         # scales. Using args.model also made the generator depend on that
         # model being cached: it broke the moment the campaign moved from
         # 32B to 7B (dress rehearsal 2026-08-02).
-        # Verified on this box: Qwen2.5-0.5B and Qwen2.5-32B give byte
-        # identical ids (vocab 151643, len 151665). The 7B is the same
-        # family but was NOT verified here -- assert it on the node, where
-        # the served model is present anyway.
-        _tok = AutoTokenizer.from_pretrained(prefix_tokenizer)
+        # Verified on this box: Qwen2.5-0.5B, 7B and 32B all give byte
+        # identical ids on the v1 prefix -- 14785 tokens, vocab 151665
+        # (0.5B vs 32B checked 2026-07; 0.5B vs 7B checked 2026-08-04,
+        # after the tokenizer was the only thing standing between the A10
+        # session and phase 1).
+        try:
+            _tok = AutoTokenizer.from_pretrained(prefix_tokenizer)
+        except Exception as e:
+            # The prefix's tokenizer is NOT the served model, so caching
+            # the served model is not enough and HF_HUB_OFFLINE=1 turns
+            # the miss into a 30-line traceback that never names the
+            # string it wanted (A10 session 2026-08-04, two cells lost).
+            sys.exit(
+                f"cannot load the prefix tokenizer {prefix_tokenizer!r}: "
+                f"{type(e).__name__}. It is declared in the prefix's "
+                f".meta.json and is NOT --model. Pre-cache it on the node "
+                f"with:\n  python -c \"from transformers import "
+                f"AutoTokenizer; AutoTokenizer.from_pretrained("
+                f"'{prefix_tokenizer}')\"")
         count_tokens = lambda t: len(_tok.encode(t, add_special_tokens=False))
     else:
         count_tokens = approx_tokens

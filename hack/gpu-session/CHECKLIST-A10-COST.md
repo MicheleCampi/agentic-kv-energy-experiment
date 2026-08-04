@@ -38,6 +38,14 @@ di sola finestra: il tempo di nodo non è il vincolo, **le celle spese sì**.
       Lo stesso contratto gira automatico in `inferscope_contract.py`
 - [ ] venv bare, `pip install vllm==0.23.0`, e `driver/.venv` con
       `requirements.txt` (il replay importa `openai`)
+- [ ] **Pre-cache dei DUE tokenizer.** Il generatore conta col tokenizer
+      con cui e' stato costruito il prefisso — dichiarato nel suo
+      `.meta.json`, **non** `--model` — e gira con `HF_HUB_OFFLINE=1`.
+      Mettere in cache il modello servito non basta:
+      `~/venv/bin/python -c "from transformers import AutoTokenizer; [AutoTokenizer.from_pretrained(m) for m in ('Qwen/Qwen2.5-7B-Instruct','Qwen/Qwen2.5-0.5B-Instruct')]"`
+      (sessione A10 2026-08-04: due celle perse su questo. Ora il
+      generatore fallisce nominando la stringa, ma il download resta
+      un passo di pre-flight)
 - [ ] `bash -n hack/gpu-session/50-cost.sh` e `python3 -m py_compile
       driver/run_cost_cell.py`
 - [ ] **Dry-run degli argv PRIMA di accendere l'engine**:
@@ -47,6 +55,17 @@ di sola finestra: il tempo di nodo non è il vincolo, **le celle spese sì**.
       base di prezzo
 
 ## 2. Readiness engine — ~5 min (7B, cache fredda)
+- [ ] **NON accendere vLLM a mano prima della fase 1.** `run_experiment.py`
+      possiede il proprio engine e lo lancia lui: un engine manuale gli
+      occupa la :8000 e il suo muore in silenzio (2026-08-04). L'engine
+      manuale serve solo alla fase 2, DOPO che la fase 1 ha chiuso
+- [ ] **`PATH` deve contenere `~/venv/bin`.** vLLM invoca `ninja` durante
+      `determine_available_memory`; lanciando il binario per percorso
+      assoluto senza PATH, l'engine muore con `FileNotFoundError: 'ninja'`
+      dopo aver gia' caricato i pesi (~30s bruciati, 2026-08-04).
+      Gli script di sessione lo esportano; un lancio manuale deve imitarli
+- [ ] `--disable-log-requests` NON esiste in vLLM 0.23.0: il flag e' stato
+      rimosso e l'engine muore ad argument parsing
 - [ ] `vllm serve` dal venv, `--enforce-eager` come invariante di matrice
 - [ ] `wait_ready` passato. **La riga "engine on :8000" NON è evidenza**:
       il fake la stampa prima di bindare, e il 2026-08-04 è comparsa con
