@@ -62,17 +62,28 @@ def check_and_write_meta(steps_file, open_runs, extra_meta, final_text=None):
         "observed_span_s": (steps[-1]["t_end_unix_ns"]
                             - steps[0]["t_start_unix_ns"]) / 1e9,
     })
-    if "tool_latency_s" in meta:
-        meta["tool_wall_s"] = n_tool * meta["tool_latency_s"]
+    # Measured, not requested. n_tool * tool_latency_s was right only
+    # while every sleep equalled the mean; with --tool-latency-cv > 0 the
+    # durations are drawn and the product becomes a plausible wrong
+    # number -- close enough never to look broken, and the numerator of
+    # the non-generating fraction as a human reads a cell. On the agentic
+    # arm it was wrong even at cv == 0: n_tool is decided by the model
+    # there, not pinned, so the product drifted with the trajectory shape.
+    meta["tool_wall_s"] = sum(
+        s["t_end_unix_ns"] - s["t_start_unix_ns"]
+        for s in steps if s["kind"] == "tool"
+    ) / 1e9
     meta_path = steps_file + ".meta.json"
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=1, sort_keys=True)
     span = meta["observed_span_s"]
-    if "tool_wall_s" in meta:
-        print(f"span: {span:.1f}s (tool wall {meta['tool_wall_s']:.1f}s at "
-              f"{meta['tool_latency_s']}s/tool, "
-              f"{100 * meta['tool_wall_s'] / span:.1f}% of span)")
+    tw = meta["tool_wall_s"]
+    if "tool_latency_s" in meta:
+        print(f"span: {span:.1f}s (tool wall {tw:.1f}s measured, "
+              f"{meta['tool_latency_s']}s/tool requested, "
+              f"{100 * tw / span:.1f}% of span)")
     else:
-        print(f"span: {span:.1f}s")
+        print(f"span: {span:.1f}s (tool wall {tw:.1f}s, "
+              f"{100 * tw / span:.1f}% of span)")
     print(f"meta: {meta_path}")
     return 0
