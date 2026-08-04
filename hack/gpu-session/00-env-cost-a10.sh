@@ -53,4 +53,33 @@ export EXP_BUDGET_HOURS_MAX=2       # 1x A10 ~$0.75/h -> cap ~$1.50,
                                     # ampiamente sotto il tetto 30 EUR
 
 export EXP_OUT_DIR="$HOME/exp-results/$(date +%Y%m%d)-a10-cost"
+# --- Fase 2: campagna costo (ADR-013 + ADR-015) ---
+# Lo sweep e' sulla tool latency: e' un parametro scelto da noi, quindi si
+# pubblica la curva col crossover, non un punto. Quattro valori coprono due
+# ordini di grandezza; f_nongen misurato a 0,2s su A10 il 21/07 = 9,78%.
+export EXP_COST_LATENCIES="0.2 0.5 2.0 5.0"
+
+# Repliche a seed dichiarati, non una run per cella. Con max_tokens fisso il
+# seed non muove la struttura: muove il testo, quindi la dispersione fra
+# repliche misura il jitter dell'engine sullo span LLM, che e' il
+# denominatore di f_nongen. Una run per cella pubblicherebbe un punto senza
+# sapere se e' distinguibile dal vicino.
+export EXP_COST_SEEDS="42 43 44"
+
+# Ramo dispersione: UNA cella dello sweep ripetuta a CV realistico. Il CV non
+# e' una seconda dimensione — f_nongen somma 3-5 durate e la media domina,
+# quindi la curva non si muove. Quello che si muove e' l'affidabilita' del
+# packing bound sotto varianza, ed e' la differenza fra pubblicare un limite
+# e pubblicare un limite con la sua dispersione.
+export EXP_COST_CV_CELL="2.0"
+export EXP_COST_CV="0.5"
+
+# Prezzo di rientro P1: cold start MISURATO da vllm-coldstart-probe, non
+# stimato. Il finding 27s/96s ne dichiara la varianza e viaggia col numero.
+export EXP_COST_REENTRY_SECS=18
+
+# Base di prezzo: una sola per derivazione (ADR-015 D2). Occupancy, perche'
+# il nodo e' noleggiato a ore e l'energia e' gia' dentro il prezzo.
+export EXP_COST_USD_PER_HOUR=0.75
+
 echo "env pinned: vllm=$EXP_VLLM_VERSION inferscope=$EXP_INFERSCOPE_VERSION model=$EXP_MODEL regimes=$EXP_REGIMES"
