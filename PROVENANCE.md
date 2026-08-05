@@ -1,98 +1,102 @@
 # PROVENANCE
 
-Record canonico dell'ambiente di esecuzione e della **provenienza dei parametri
-di workload**. I JSON in `results/` e `sim-results/` non portano tag
-hardware/stack: ogni output è prodotto sotto l'ambiente qui descritto. In caso
-di conflitto con uno snapshot per-run, prevale lo snapshot per-run.
+Canonical record of the execution environment and of the **provenance of the
+workload parameters**. The JSON files in `results/` and `sim-results/` carry no
+hardware/stack tags: every output is produced under the environment described
+here. Where a per-run snapshot conflicts with this document, the per-run
+snapshot wins.
 
-## Identità della misura (inferscope)
+## Identity of the measurement (inferscope)
 
-inferscope **non misura energia per-fase.** I contatori NVML sono whole-device;
-prefill e decode co-locano sullo stesso array di SM. inferscope espone una
-**apportionment dual-basis** dell'energia totale misurata (time-share e
-token-share) e la **divergenza** tra le due basi come segnale derivato di prima
-classe — onesto sulla co-locazione, non una pretesa di attribuzione fisica.
+inferscope **does not measure per-phase energy.** NVML counters are
+whole-device; prefill and decode co-locate on the same SM array. inferscope
+exposes a **dual-basis apportionment** of the measured total energy (time-share
+and token-share) and the **divergence** between the two bases as a first-class
+derived signal — honest about the co-location, not a claim of physical
+attribution.
 
-inferscope **NON è modificato** per questo esperimento. I due segnali necessari
-esistono già:
-- KV-cache hit-rate via scrape Prometheus (ADR-011).
-- Energia per-fase / divergenza dual-basis (ADR-012).
-L'esperimento varia il regime di hit-rate e osserva come si muovono entrambi.
+inferscope is **NOT modified** for this experiment. The two signals it needs
+already exist:
 
-## Tesi (e sua fonte)
+- KV-cache hit-rate via Prometheus scrape (ADR-011).
+- Per-phase energy / dual-basis divergence (ADR-012).
 
-Fonte: Yuan et al., *Agentic AI Workload Characteristics*, arXiv:2605.26297
+The experiment varies the hit-rate regime and observes how both move.
+
+## The thesis (and its source)
+
+Source: Yuan et al., *Agentic AI Workload Characteristics*, arXiv:2605.26297
 (25 May 2026).
 
-Il paper stabilisce — misurando tempo e token, **non energia** — che i workload
-agentici ReAct-style sono *decode-dominated condizionatamente all'hit-rate*:
-con prefix caching efficace l'input è largamente riusato (hit-rate empirici
-84.6–99.5%, decode 91.0–98.6% del tempo LLM), ma "se questo stato viene evicted,
-un workload decode-dominated può diventare costosa ricomputazione" (§5).
+The paper establishes — measuring time and tokens, **not energy** — that
+ReAct-style agentic workloads are *decode-dominated conditional on hit-rate*:
+with effective prefix caching the input is largely reused (empirical hit-rates
+84.6–99.5%, decode 91.0–98.6% of LLM time), but "if this state is evicted, a
+decode-dominated workload can become expensive recomputation" (§5).
 
-Questo esperimento rende **quantitativa e energetica** quella frase: misura come
-variano tokens/joule e la divergenza dual-basis attraverso il regime di hit-rate
-(freddo → caldo), e caratterizza la transizione nel caso di stress (contesto
-gonfio da fallimento, append non-cached). L'asse energia è lo spazio che il
-paper lascia esplicitamente vuoto.
+This experiment makes that sentence **quantitative and energetic**: it measures
+how tokens/joule and the dual-basis divergence move across the hit-rate regime
+(cold → warm), and characterises the transition under stress (context inflated
+by failure, non-cached append). The energy axis is the space the paper
+explicitly leaves empty.
 
-## Provenienza dei parametri di workload
+## Provenance of the workload parameters
 
-Il generatore di traffico è **sintetico, derivato da distribuzioni pubblicate**
-— NON da trace reali (il paper non rilascia trace). Ogni parametro è ancorato a
-una figura/tabella della fonte. I valori esatti sono fissati in PROTOCOL.md; qui
-si dichiara la mappatura di provenienza:
+The traffic generator is **synthetic, derived from published distributions** —
+NOT from real traces (the paper releases none). Every parameter is anchored to
+a figure or table in the source. The exact values are fixed in PROTOCOL.md;
+what is declared here is the provenance mapping:
+- turns per task → Fig. 3 (min/max/mean±std per benchmark and mode)
+- accumulated context → Fig. 4 (mean/max in tokens)
+- output composition (thinking/message/tool-call) → Fig. 5
+- LLM-vs-tool time split → Fig. 7
+- Input/Output and Append/Output ratios per turn → §5 (per-turn table)
+- failure signature (context up to 1.8× the mean) → Fig. 6
 
-- turni per task → Fig. 3 (min/max/mean±std per benchmark e modalità)
-- contesto accumulato → Fig. 4 (mean/max in token)
-- composizione output (thinking/message/tool-call) → Fig. 5
-- ripartizione tempo LLM-vs-tool → Fig. 7
-- rapporti Input/Output, Append/Output per turno → §5 (tabella per-turn)
-- firma del fallimento (contesto fino a 1.8× medio) → Fig. 6
+Where the paper gives an interval but not the shape of the internal
+distribution, the assumed shape is declared as an **explicit assumption** in
+PROTOCOL.md (e.g. sampling within min/max around mean±std), not passed off as
+measured.
 
-Dove il paper dà un intervallo ma non la forma della distribuzione interna, la
-forma assunta è dichiarata come **assunzione esplicita** in PROTOCOL.md (es.
-campionamento entro min/max attorno a mean±std), non spacciata per misurata.
+## Divergence from the source's setup (declared, not hidden)
 
-## Divergenza dal setup della fonte (dichiarata, non nascosta)
+This experiment does NOT replicate the paper's setup. Deliberate differences:
 
-Questo esperimento NON replica il setup del paper. Differenze deliberate:
+| dimension | paper (2605.26297)         | this experiment              |
+|-----------|----------------------------|------------------------------|
+| model     | Qwen3.6-27B / Gemma4-31B   | Qwen2.5 (consistent w/ series)|
+| vLLM      | v0.20.0, TP=2              | 0.23.0 cu13, single-GPU      |
+| hardware  | 2× H100 NVL, 12 NVLink     | 1× H100 PCIe (Lambda)        |
+| measures  | time, tokens (OTel/Jaeger) | **per-phase energy** (NVML)  |
 
-| dimensione   | paper (2605.26297)        | questo esperimento          |
-|--------------|---------------------------|-----------------------------|
-| modello      | Qwen3.6-27B / Gemma4-31B  | Qwen2.5 (coerente con serie)|
-| vLLM         | v0.20.0, TP=2             | 0.23.0 cu13, single-GPU     |
-| hardware     | 2× H100 NVL, 12 NVLink    | 1× H100 PCIe (Lambda)       |
-| misura       | tempo, token (OTel/Jaeger)| **energia per-fase** (NVML) |
-
-Razionale: l'obiettivo non è riprodurre la caratterizzazione task del paper, ma
-misurare un asse ortogonale (energia) che il paper non copre, su uno stack
-coerente con gli esperimenti gemelli (cuda-graphs, chunk-size). La forma del
-workload è presa dal paper; l'hardware e l'engine sono i propri.
+Rationale: the goal is not to reproduce the paper's task characterisation but
+to measure an orthogonal axis (energy) the paper does not cover, on a stack
+consistent with the sibling experiments (cuda-graphs, chunk-size). The shape of
+the workload is taken from the paper; the hardware and the engine are our own.
 
 ## Hardware
 
-- GPU: NVIDIA H100 PCIe (singolo dispositivo) — *UUID catturato per-run*
-- Host: istanza on-demand Lambda Cloud
+- GPU: NVIDIA H100 PCIe (single device) — *UUID captured per run*
+- Host: Lambda Cloud on-demand instance
 
-## Stack software
+## Software stack
 
 - Base OS: lambda-stack-24-04 (Ubuntu 24.04)
 - NVIDIA driver: 580.105.08
 - CUDA: 13.0
-- vLLM: 0.23.0 (build cu13)
-- Python: *catturato per-run*
-- inferscope: *commit HEAD catturato per-run*
+- vLLM: 0.23.0 (cu13 build)
+- Python: *captured per run*
+- inferscope: *HEAD commit captured per run*
 
-## Validazione pre-GPU
+## Pre-GPU validation
 
-Il generatore e il path di cattura sono sviluppati e validati su
-`llm-d-inference-sim` (CPU-only, KV-cache abilitato) su `optim-dev`, PRIMA di
-qualsiasi ora-GPU. Gli output di simulazione vivono in `sim-results/` e sono
-distinti dalla cattura energia reale in `results/`. "Validato in simulazione" e
-"misurato su GPU" non si confondono.
+The generator and the capture path are developed and validated against
+`llm-d-inference-sim` (CPU-only, KV-cache enabled) on `optim-dev`, BEFORE any
+GPU hour. Simulation outputs live in `sim-results/` and are kept distinct from
+real energy capture in `results/`. "Validated in simulation" and "measured on
+GPU" are never conflated.
 
-## Cattura per-run
+## Per-run capture
 
-L'orchestratore scrive uno snapshot di provenance machine-readable accanto a
-ogni run (nvidia-smi, vllm --version, inferscope --version, git HEAD).
+The orchestrator writes a machine-readable provenance snapshot alongside every
+run (nvidia-smi, vllm --version, inferscope --version, git HEAD).
