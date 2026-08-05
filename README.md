@@ -110,6 +110,16 @@ the bound at 2.0 s/tool is 1.23 ranging 1.20-1.26 under realistic variance
 rather than a bare 1.23. It remains an upper bound under declared
 non-interference.
 
+**The same session closed ADR-011 against real vLLM.** The hit-rate scrape
+that the H100 matrix above could not use — it did not read vLLM's
+prefix-cache series until 2026-08-02 — was validated on the node before the
+cost sweep: 203,456 hits over 235,209 queries at H2 against exactly zero hits
+over 251,320 queries at H0, the two regimes separating by 0.865 in absolute
+terms. Until then the claim held only against the simulator. One declared
+limit: the H0 cell overran its window (115.7s against 90s), so its energy is
+truncated and no tok/J should be derived from it — the hit-rate figures are
+unaffected, coming from the Prometheus delta rather than the window.
+
 Design decisions were written down **before** the node was switched on and
 the results sit beside them unedited, including the ones the measurement
 falsified: [`PROTOCOL.md`](PROTOCOL.md), tertiary axis. Sixteen cell
