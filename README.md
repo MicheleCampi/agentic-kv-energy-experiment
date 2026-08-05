@@ -1,9 +1,17 @@
 # agentic-kv-energy-experiment
 
-Measuring the energy signature (tokens/joule) of agentic ReAct workloads
-across KV-cache hit-rate regimes — Qwen2.5-32B on H100 SXM5, vLLM.
+Two measured axes on one agentic ReAct workload, on rented GPUs, with the
+design written down before each node was switched on:
 
-## Headline result
+- **energy against cache reuse** — tokens/joule across KV-cache hit-rate
+  regimes (Qwen2.5-32B, H100 SXM5, 18 cells);
+- **cost against tool latency** — how much of a GPU's price is paid while it
+  is allocated and not generating (Qwen2.5-7B, A10, 15 cells).
+
+Both measured with [inferscope](https://github.com/MicheleCampi/inferscope) on
+vLLM 0.23.0, evidence and per-cell provenance committed.
+
+## First axis: energy against cache reuse
 
 | Regime | KV-cache reuse | tok/J (window-based, nominal) |
 |---|---|---|
@@ -66,6 +74,48 @@ cells. Per-sample energy was not persisted, so the exact active-window
 figure remains out of reach (F16) and the published metric stays
 window-based.
 
+## Second axis: what an agentic trajectory costs while it waits
+
+The matrix above measures energy against cache reuse. A second campaign on
+the same workload measures **cost against tool latency** — how much of a
+GPU's price is paid while that GPU is allocated and not generating. Fifteen
+cells on 1×A10 (Qwen2.5-7B, vLLM 0.23.0), 2026-08-04.
+
+| tool latency | non-generating fraction | packing bound | $/M gen tokens |
+|-------------:|------------------------:|--------------:|---------------:|
+| 0.2 s        |                   2.30% |          1.02 |         $12.16 |
+| 0.5 s        |                   5.55% |          1.06 |         $12.62 |
+| 2.0 s        |                  19.01% |          1.23 |         $14.72 |
+| 5.0 s        |                  37.01% |          1.59 |         $18.91 |
+
+**The cost of generating does not move: $0.00911-0.00916 per trajectory
+across all fifteen cells** — same 768 tokens, same GPU, same model, a 0.5%
+band. All of the +56% in $/M token is waiting. Prices are derived at a declared $1.29/h and computed
+over the trajectory span, not over the sampling window; the window is an
+instrument parameter, and the distinction is documented in `PROTOCOL.md`
+rather than smoothed over.
+
+**The obvious policy is falsified.** Releasing the GPU on tool segments
+longer than the measured re-entry price saves **0.000s on every one of the
+fifteen cells**: the longest segment in the interval the source documents
+(Fig. 7, tools 2-29% of the time) is 5.0s against a ~18s cold start measured
+in [vllm-coldstart-probe](https://github.com/MicheleCampi/vllm-coldstart-probe).
+Break-even sits outside the published range. The time is not freed — it is
+filled, which is what the packing bound quantifies.
+
+**The bound travels with its dispersion.** Three cells were spent repeating
+one latency at CV 0.5 on the tool sleep. The mean is unchanged (18.95% vs
+19.01%) while the spread across replicas goes from 0.006 to 4.09 points, so
+the bound at 2.0 s/tool is 1.23 ranging 1.20-1.26 under realistic variance
+rather than a bare 1.23. It remains an upper bound under declared
+non-interference.
+
+Design decisions were written down **before** the node was switched on and
+the results sit beside them unedited, including the ones the measurement
+falsified: [`PROTOCOL.md`](PROTOCOL.md), tertiary axis. Sixteen cell
+directories of evidence — steps-file, its meta, report, argv, cost,
+decision — under `validation-results-a10-cost/`.
+
 ## Measurement
 
 - Profiling: [inferscope](https://github.com/MicheleCampi/inferscope) —
@@ -79,9 +129,11 @@ window-based.
 - Full analysis, anomaly log (zero exclusions), cross-checks and
   reproduction steps: [`analysis/RESULTS.md`](analysis/RESULTS.md).
 - Per-cell and aggregate computation: [`analysis/tokj_matrix.py`](analysis/tokj_matrix.py).
-- `driver/` is a separate experiment sharing this repo: the ADR-013
-  per-trajectory attribution driver, run on 1xA10 on 2026-07-21. It does not
-  feed the matrix results above.
+- `driver/` holds the second axis: the ADR-013 per-trajectory attribution
+  driver and the phase-2 cost cell orchestrator. It does not feed the
+  hit-rate matrix above — the two axes are separate campaigns on the same
+  workload, run sequentially on the same node because ADR-013 needs one
+  trajectory in flight while the matrix needs N concurrent sessions.
 
 Two limits of the evidence itself, stated rather than discovered later:
 per-cell manifests carry no timestamp, so execution order is recoverable

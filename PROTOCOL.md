@@ -387,10 +387,12 @@ decomposition of the price, at the declared rate of $1.29/h:
 | 2.0 s        |       $0.009158 | $0.002150  |   10× |
 | 5.0 s        |       $0.009147 | $0.005375  |   25× |
 
-The cost of generating is **flat at $0.00915 across all fifteen cells** — the
-same 768 tokens, the same GPU, the same model. All of the price growth, +55%
-from $12.16 to $18.91 per M token, is time during which the GPU is allocated
-and not generating.
+The cost of generating is **flat across all fifteen cells within a 0.5% band,
+$0.00911-0.00916** — the same 768 tokens, the same GPU, the same model. The
+band is quoted rather than a rounded single figure: on a claim that a quantity
+does not move, how much it does not move is the claim. All of the price
+growth, +56% from $12.16 to $18.91 per M token, is time during which the GPU
+is allocated and not generating.
 
 ### A reading constraint on the $/M token figure
 
