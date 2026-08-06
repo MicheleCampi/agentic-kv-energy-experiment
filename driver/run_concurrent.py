@@ -1,0 +1,271 @@
+#!/usr/bin/env python3
+"""Drive N replay trajectories concurrently and sample the engine's
+running-request count (ADR-0010 in vllm-coldstart-operator).
+
+The prediction under test: N trajectories each idle for f_nongen of their
+span should hold the engine at a time-averaged `num_requests_running` of
+N * (1 - f_nongen), not N. Both sides are measured here — the left from
+the engine's own Prometheus endpoint, the right from the steps-files the
+replays write.
+
+WINDOW, declared before the first run: the measurement window is the
+interval in which ALL N trajectories are simultaneously in flight, i.e.
+[max(start_i), min(end_i)] over the N steps-files, resolved offline once
+they exist. Not the union. In the tail where one trajectory has finished
+and the others have not, true concurrency is N-1, and averaging over it
+would depress the running count for a reason that belongs to the choice
+of window rather than to the engine. That is the same defect class as
+dividing by the sampling window instead of the trajectory span, which is
+what the cost campaign had to correct for.
+
+The sampler therefore runs for the whole wall-clock and timestamps every
+sample; the trim happens in analysis. The full series stays in the
+evidence, and the gap between the trimmed and untrimmed reading is itself
+reported rather than hidden.
+
+This experiment CANNOT use ADR-013 per-step attribution: with N
+trajectories overlapping, a sampled instant has no unique owner. Observables
+are engine-side only.
+"""
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+NS = 1_000_000_000
+
+
+def scrape_running(metrics_url, timeout=2.0):
+    """Sum `vllm:num_requests_running` across the endpoint's series.
+
+    Returns None on any failure: absence is not zero, exactly as the
+    operator's NodeState contract states. A failed scrape that read as
+    0.0 would look like an idle engine and pull the mean down.
+    """
+    try:
+        with urllib.request.urlopen(metrics_url, timeout=timeout) as r:
+            body = r.read().decode("utf-8", "replace")
+    except Exception:
+        return None
+    total, seen = 0.0, False
+    for line in body.splitlines():
+        if not line.startswith("vllm:num_requests_running"):
+            continue
+        if line.startswith("#"):
+            continue
+        try:
+            total += float(line.rsplit(None, 1)[1])
+            seen = True
+        except (IndexError, ValueError):
+            continue
+    return total if seen else None
+
+
+def replay_argv(a, idx, steps_path):
+    """argv of one replay arm. Seeds differ per trajectory so the N are
+    not bit-identical requests the engine could collapse; everything
+    else is the fixed structure the cost campaign pinned."""
+    return [
+        str(a.python), str(Path(a.driver) / "run_replay.py"),
+        "--base-url", a.base_url,
+        "--model", a.model,
+        "--steps-file", str(steps_path),
+        "--tool-latency-s", str(a.tool_latency_s),
+        "--tool-latency-cv", str(a.tool_latency_cv),
+        "--n-llm", str(a.n_llm),
+        "--n-tool", str(a.n_tool),
+        "--max-tokens", str(a.max_tokens),
+        "--seed", str(a.seed_base + idx),
+    ]
+
+
+def run_arm(a, out_dir):
+    """Launch N replays, sample the engine while they run, write evidence.
+
+    Returns 0 when every replay passed its gates, 1 otherwise. A failed
+    replay is not silently averaged over: with N-1 trajectories the arm
+    is a different experiment.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    steps = [out_dir / f"steps-{i}.jsonl" for i in range(a.n)]
+    argv = {f"replay-{i}": replay_argv(a, i, steps[i]) for i in range(a.n)}
+    (out_dir / "argv.json").write_text(json.dumps(argv, indent=1))
+
+    samples = []
+    t_start = time.time_ns()
+    procs = [
+        subprocess.Popen(argv[f"replay-{i}"], stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, text=True)
+        for i in range(a.n)
+    ]
+    # Sample until every replay has exited. The loop owns the cadence, so
+    # a slow scrape shortens the next sleep rather than drifting the
+    # series: a drifting series would weight late samples differently
+    # from early ones and the mean would stop being a time average.
+    period = a.sample_period_ms / 1000.0
+    next_at = time.time()
+    while any(p.poll() is None for p in procs):
+        v = scrape_running(a.metrics_url)
+        samples.append({"t_unix_ns": time.time_ns(), "running": v})
+        next_at += period
+        time.sleep(max(0.0, next_at - time.time()))
+
+    rcs = []
+    for i, p in enumerate(procs):
+        out, _ = p.communicate()
+        (out_dir / f"replay-{i}.log").write_text(out or "")
+        rcs.append(p.returncode)
+
+    (out_dir / "running-series.json").write_text(json.dumps({
+        "t_start_unix_ns": t_start,
+        "t_end_unix_ns": time.time_ns(),
+        "sample_period_ms": a.sample_period_ms,
+        "metrics_url": a.metrics_url,
+        "n_concurrent": a.n,
+        "samples": samples,
+    }, indent=1))
+
+    missing = sum(1 for s in samples if s["running"] is None)
+    print(f"[arm n={a.n}] {len(samples)} samples, {missing} failed scrapes, "
+          f"replay rcs={rcs}")
+    metas = [Path(str(s) + ".meta.json").exists() for s in steps]
+    if any(rc != 0 for rc in rcs) or not all(metas):
+        print(f"[arm n={a.n}] ABORT: not every replay passed its gates "
+              f"(meta present: {metas}) — with N-1 trajectories this is a "
+              f"different experiment, not a noisier one")
+        return 1
+    return 0
+
+
+def analyse(out_dir):
+    """Apply the declared window and report both readings.
+
+    Returns a dict, also written to analysis.json. The untrimmed mean is
+    reported beside the trimmed one because the difference between them
+    is the size of the tail artefact, and a reader is entitled to see it
+    rather than take the trim on trust.
+    """
+    d = json.loads((out_dir / "running-series.json").read_text())
+    n = d["n_concurrent"]
+    spans = []
+    for p in sorted(out_dir.glob("steps-*.jsonl")):
+        steps = [json.loads(l) for l in p.read_text().splitlines() if l.strip()]
+        if not steps:
+            return {"error": f"{p.name} is empty"}
+        spans.append((steps[0]["t_start_unix_ns"], steps[-1]["t_end_unix_ns"]))
+    if len(spans) != n:
+        return {"error": f"{len(spans)} steps-files for n={n}"}
+
+    lo, hi = max(s for s, _ in spans), min(e for _, e in spans)
+    if hi <= lo:
+        return {"error": "no interval with all N in flight — the "
+                         "trajectories did not overlap, so nothing here "
+                         "measures concurrency"}
+
+    vals = [s["running"] for s in d["samples"] if s["running"] is not None]
+    inwin = [s["running"] for s in d["samples"]
+             if s["running"] is not None and lo <= s["t_unix_ns"] <= hi]
+    if not inwin:
+        return {"error": "no successful scrape inside the declared window"}
+
+    # f_nongen from the trajectories themselves, same definition the cost
+    # campaign publishes: tool wall plus inter-step gaps over the span.
+    fracs = []
+    for p in sorted(out_dir.glob("steps-*.jsonl")):
+        steps = [json.loads(l) for l in p.read_text().splitlines() if l.strip()]
+        span = steps[-1]["t_end_unix_ns"] - steps[0]["t_start_unix_ns"]
+        tool = sum(s["t_end_unix_ns"] - s["t_start_unix_ns"]
+                   for s in steps if s["kind"] == "tool")
+        gaps = sum(b["t_start_unix_ns"] - a_["t_end_unix_ns"]
+                   for a_, b in zip(steps, steps[1:]))
+        fracs.append((tool + gaps) / span)
+    f = sum(fracs) / len(fracs)
+
+    mean_in = sum(inwin) / len(inwin)
+    predicted = n * (1.0 - f)
+    res = {
+        "n_concurrent": n,
+        "f_nongen_mean": f,
+        "predicted_running": predicted,
+        "observed_running_windowed": mean_in,
+        "observed_running_untrimmed": sum(vals) / len(vals) if vals else None,
+        "window_ns": [lo, hi],
+        "window_secs": (hi - lo) / NS,
+        "samples_in_window": len(inwin),
+        "samples_total": len(d["samples"]),
+        "failed_scrapes": sum(1 for s in d["samples"] if s["running"] is None),
+    }
+    # ADR-0010 D3, thresholds fixed before any run.
+    if abs(mean_in - n) <= 0.10 * n:
+        res["verdict"] = "BOUND RULED OUT AS CAPACITY: observed within 10% of N"
+    elif abs(mean_in - predicted) <= 0.15 * predicted:
+        res["verdict"] = "BOUND SUPPORTED: observed within 15% of N*(1-f_nongen)"
+    else:
+        res["verdict"] = "INCONCLUSIVE: between the two criteria, closes nothing"
+    (out_dir / "analysis.json").write_text(json.dumps(res, indent=1))
+    return res
+
+
+def main():
+    p = argparse.ArgumentParser(
+        description="ADR-0010: drive N concurrent trajectories, sample the "
+                    "engine's running count, apply the declared window.")
+    p.add_argument("--out-dir", required=True, help="arm directory: the archivable unit")
+    p.add_argument("--n", type=int, required=True,
+                   help="concurrent trajectories. ADR-0010 D4 runs two arms: "
+                        "n=1 as the anchor, n=ceil(bound) as the test.")
+    p.add_argument("--model", required=True)
+    p.add_argument("--base-url", default="http://127.0.0.1:8000/v1")
+    p.add_argument("--metrics-url", default="http://127.0.0.1:8000/metrics")
+    p.add_argument("--driver", default=str(Path(__file__).resolve().parent))
+    p.add_argument("--python",
+                   default=str(Path(__file__).resolve().parent / ".venv/bin/python"))
+    p.add_argument("--tool-latency-s", type=float, required=True,
+                   help="must match the cost-campaign cell whose f_nongen "
+                        "the prediction is taken from")
+    p.add_argument("--tool-latency-cv", type=float, default=0.0)
+    p.add_argument("--n-llm", type=int, default=4)
+    p.add_argument("--n-tool", type=int, default=3)
+    p.add_argument("--max-tokens", type=int, default=192)
+    p.add_argument("--seed-base", type=int, default=42)
+    p.add_argument("--sample-period-ms", type=int, default=250,
+                   help="scrape cadence. Deliberately slower than the "
+                        "operator reporter's: this is an HTTP round-trip "
+                        "per sample and the quantity is a gauge, not a "
+                        "counter that would lose events between reads.")
+    p.add_argument("--dry-run", action="store_true",
+                   help="print the argv of every arm and exit, spending nothing")
+    p.add_argument("--analyse-only", action="store_true",
+                   help="re-run the analysis over an existing arm directory")
+    a = p.parse_args()
+
+    if a.n < 1:
+        sys.exit("--n must be >= 1")
+    out_dir = Path(a.out_dir)
+
+    if a.analyse_only:
+        res = analyse(out_dir)
+        print(json.dumps(res, indent=1))
+        return 0 if "error" not in res else 1
+
+    if a.dry_run:
+        for i in range(a.n):
+            print(f"--- replay-{i}\n{' '.join(replay_argv(a, i, out_dir / f'steps-{i}.jsonl'))}\n")
+        print(f"--- sampler\nGET {a.metrics_url} every {a.sample_period_ms}ms "
+              f"until all {a.n} replays exit")
+        return 0
+
+    rc = run_arm(a, out_dir)
+    res = analyse(out_dir)
+    print(json.dumps(res, indent=1))
+    if "error" in res:
+        return 1
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())
