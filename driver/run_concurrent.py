@@ -51,11 +51,18 @@ def scrape_running(metrics_url, timeout=2.0):
             body = r.read().decode("utf-8", "replace")
     except Exception:
         return None
+    # The metric name must end where the sample does: vLLM emits
+    # `vllm:num_requests_running{engine="0",model_name="..."} 2.0`, and a
+    # bare startswith would also match a hypothetical
+    # `vllm:num_requests_running_total` and silently sum it in. The next
+    # character after the name has to be `{` or whitespace.
     total, seen = 0.0, False
+    prefix = "vllm:num_requests_running"
     for line in body.splitlines():
-        if not line.startswith("vllm:num_requests_running"):
+        if line.startswith("#") or not line.startswith(prefix):
             continue
-        if line.startswith("#"):
+        rest = line[len(prefix):]
+        if rest and rest[0] not in "{ \t":
             continue
         try:
             total += float(line.rsplit(None, 1)[1])
