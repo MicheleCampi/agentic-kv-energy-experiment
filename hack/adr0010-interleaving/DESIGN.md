@@ -126,10 +126,20 @@ the comparison is void.
 
 ## Gates
 
-**1. Zero-cost rehearsal.** Run the harness against a CPU-only stub that exposes
-`vllm:num_requests_running`, with and without offset, and confirm the analysis
-distinguishes the two. A rehearsal that cannot tell the arms apart on a stub
-will not tell them apart on hardware either.
+**1. Zero-cost rehearsal — PASSED 2026-08-20.** `stub.py` exposes
+`vllm:num_requests_running` from two threads that alternate work and wait the
+way a trajectory does; `probe.py` samples it at 250ms with and without offset.
+
+    LOCKSTEP   offset 0.00s   running==1:  0.0%   mean 0.729   {0: 82, 2: 47}
+    STAGGERED  offset 1.25s   running==1: 59.0%   mean 0.709   {0: 47, 1: 79, 2: 8}
+
+The lockstep arm reproduces the shape of the real ADR-0010 series — 0 or 2,
+never 1 — and staggering moves the mass onto 1.
+
+**The rehearsal also justifies the choice of primary metric.** The two means are
+0.729 and 0.709: had the mean been primary, this run would have read as *no
+difference*, and on hardware the same collapse would have hidden a real effect.
+The fraction at `running == 1` moved by 59 points on the same data.
 
 **2. Pre-flight on the node, with an abort criterion.** Before the first
 measured rep, one SYNC rep must reproduce the ADR-0010 shape — `running == 1`
