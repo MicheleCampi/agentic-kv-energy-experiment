@@ -11,6 +11,21 @@ design written down before each node was switched on:
 Both measured with [inferscope](https://github.com/MicheleCampi/inferscope) on
 vLLM 0.23.0, evidence and per-cell provenance committed.
 
+**What the two axes are for.** Anyone running agents on their own GPUs has to
+answer one question before buying hardware: *how many concurrent trajectories
+does a replica actually hold, and what does each one cost while it waits on a
+tool?* The energy axis gives the per-trajectory cost of the cache regime; the
+cost axis shows that the increase with tool latency is allocation rather than
+work — the GPU is paid for, and idle. A third result, a packing bound derived
+from this data and then
+[tested on hardware](https://github.com/MicheleCampi/vllm-coldstart-operator),
+says how many trajectories fit before the arithmetic breaks. That is capacity
+planning for agent infrastructure, measured rather than modelled.
+
+The limit travels with it: in the bound test the trajectories ran in lockstep
+and shared their idle time instead of interleaving, so the packing figure holds
+for synchronised replicas and the staggered case is still open.
+
 ## First axis: energy against cache reuse
 
 | Regime | KV-cache reuse | tok/J (window-based, nominal) |
