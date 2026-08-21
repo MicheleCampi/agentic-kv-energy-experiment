@@ -104,11 +104,24 @@ def run_arm(a, out_dir):
 
     samples = []
     t_start = time.time_ns()
-    procs = [
-        subprocess.Popen(argv[f"replay-{i}"], stdout=subprocess.PIPE,
-                         stderr=subprocess.STDOUT, text=True)
-        for i in range(a.n)
-    ]
+    # Start offset (staggered-start experiment). Replica i starts at
+    # i * start_offset_s. Zero reproduces the lockstep condition ADR-0010
+    # measured, where the raw series never showed running=1 because the
+    # trajectories generated together and waited together.
+    #
+    # The sleep sits between the Popen calls rather than inside the replay
+    # driver so that nothing about the trajectory itself changes: same
+    # script, same seeds, same request pattern. The only difference between
+    # the arms is when each process begins, which is what the experiment is
+    # about.
+    procs = []
+    for i in range(a.n):
+        if i and a.start_offset_s > 0:
+            time.sleep(a.start_offset_s)
+        procs.append(
+            subprocess.Popen(argv[f"replay-{i}"], stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True)
+        )
     # Sample until every replay has exited. The loop owns the cadence, so
     # a slow scrape shortens the next sleep rather than drifting the
     # series: a drifting series would weight late samples differently
@@ -203,6 +216,15 @@ def analyse(out_dir):
         "window_ns": [lo, hi],
         "window_secs": (hi - lo) / NS,
         "samples_in_window": len(inwin),
+        # Staggered-start experiment. The offset is echoed so a result
+        # file states which arm produced it rather than relying on the
+        # directory name. running_eq_one_fraction is the primary metric:
+        # it is the direct measure of interleaving, and it was exactly
+        # zero across every sample of the ADR-0010 lockstep run.
+        "start_offset_s": a.start_offset_s,
+        "running_eq_one_fraction": (
+            sum(1 for v in inwin if v == 1) / len(inwin) if inwin else None
+        ),
         "samples_total": len(d["samples"]),
         "failed_scrapes": sum(1 for s in d["samples"] if s["running"] is None),
     }
@@ -239,6 +261,13 @@ def main():
     p.add_argument("--n-tool", type=int, default=3)
     p.add_argument("--max-tokens", type=int, default=192)
     p.add_argument("--seed-base", type=int, default=42)
+    p.add_argument("--start-offset-s", type=float, default=0.0,
+                   help="delay between successive replica starts. 0 "
+                        "reproduces the lockstep condition ADR-0010 "
+                        "measured; a positive value staggers the "
+                        "trajectories so one may generate while another "
+                        "waits on a tool. The value is an input to be "
+                        "declared, not tuned between runs.")
     p.add_argument("--sample-period-ms", type=int, default=250,
                    help="scrape cadence. Deliberately slower than the "
                         "operator reporter's: this is an HTTP round-trip "

@@ -89,8 +89,16 @@ tuned afterwards.
 
 **Primary metric: the fraction of samples where `running == 1`.**
 
-This is the direct measurement of interleaving, and it is currently **exactly
-zero** — 0 of 166 samples in the rep examined. It is a better primary than the
+This is the direct measurement of interleaving. Checking all three ADR-0010 reps
+rather than the one whose series I had opened first: the fractions are 0.0000,
+0.0240 and 0.0060 — mean **1.00%, sd 1.25%**. Not zero, and the spread between
+reps is larger than the mean.
+
+That matters for the criterion. A first draft of this design said the baseline
+was exactly zero, which was true of rep1 and false of the other two. Reading one
+series and generalising is the same defect this project has caught twice before,
+and the threshold below is set against the measured spread rather than against
+an assumed floor. It is a better primary than the
 mean running count because it cannot be moved by anything except one trajectory
 generating while the other does not.
 
@@ -99,10 +107,14 @@ bound is expressed in and what a capacity calculation would use.
 
 Verdict:
 
-- `running == 1` fraction rises clearly above zero **and** the mean increases →
+Threshold, fixed now: the staggered arm's mean `running == 1` fraction must
+exceed the lockstep mean by more than **twice the lockstep spread** — that is,
+above **3.5%** — with the arms' confidence intervals clear of each other.
+
+- fraction above 3.5% **and** mean running count increases →
   **interleaving happens**; the lockstep bound is conservative under staggered
   arrival, and by how much is the useful number.
-- fraction stays at or near zero → **negative result**: starts being staggered
+- fraction within the lockstep spread → **negative result**: staggering starts
   does not make the trajectories share a replica any better. The existing bound
   holds regardless of arrival pattern, which is the stronger claim.
 - mean moves but the fraction does not → something else changed; report it as
@@ -121,7 +133,7 @@ will not tell them apart on hardware either.
 
 **2. Pre-flight on the node, with an abort criterion.** Before the first
 measured rep, one SYNC rep must reproduce the ADR-0010 shape — `running == 1`
-at or near zero, mean around 1.24. If it does not, the harness or the engine
+within the 0-2.4% range the three recorded reps span, mean around 1.24. If it does not, the harness or the engine
 config differs from the recorded run and the comparison to it is void. Abort
 rather than continue against an unknown baseline.
 
