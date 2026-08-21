@@ -161,7 +161,7 @@ def run_arm(a, out_dir):
     return 0
 
 
-def analyse(out_dir):
+def analyse(out_dir, start_offset_s=0.0):
     """Apply the declared window and report both readings.
 
     Returns a dict, also written to analysis.json. The untrimmed mean is
@@ -221,7 +221,7 @@ def analyse(out_dir):
         # directory name. running_eq_one_fraction is the primary metric:
         # it is the direct measure of interleaving, and it was exactly
         # zero across every sample of the ADR-0010 lockstep run.
-        "start_offset_s": a.start_offset_s,
+        "start_offset_s": start_offset_s,
         "running_eq_one_fraction": (
             sum(1 for v in inwin if v == 1) / len(inwin) if inwin else None
         ),
@@ -284,7 +284,7 @@ def main():
     out_dir = Path(a.out_dir)
 
     if a.analyse_only:
-        res = analyse(out_dir)
+        res = analyse(out_dir, a.start_offset_s)
         print(json.dumps(res, indent=1))
         return 0 if "error" not in res else 1
 
@@ -296,7 +296,7 @@ def main():
         return 0
 
     rc = run_arm(a, out_dir)
-    res = analyse(out_dir)
+    res = analyse(out_dir, a.start_offset_s)
     print(json.dumps(res, indent=1))
     if "error" in res:
         return 1

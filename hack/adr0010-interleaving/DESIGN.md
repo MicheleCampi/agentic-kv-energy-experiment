@@ -173,4 +173,65 @@ not less.
 
 ## Measured results (outputs)
 
-To be filled after the run, beside the design rather than in place of it.
+Run 2026-08-21, 1×A10 on Lambda, driver 580.105.08, vLLM 0.23.0,
+Qwen2.5-7B-Instruct, `--enforce-eager`, 5.0 s/tool, 4 reps per arm in
+ABBA+BAAB. Evidence: `runs/20260821/`. Zero failed scrapes across all eight.
+
+**Verdict against the criterion fixed before the run: interleaving happens.**
+
+| | SYNC | STAGGERED |
+|---|---|---|
+| `running == 1` fraction | 0.61% (sd 0.50) | **40.69%** (sd 0.33) |
+| mean running count | 1.2477 | 1.2010 |
+| time at `running == 0` | 38.5% (sd 0.4) | **18.0%** (sd 0.0) |
+
+The primary metric moved from 0.61% to 40.69% against a threshold of 3.5%. The
+intervals do not come close to touching.
+
+**The number worth carrying: idle time halves.** A replica serving two
+synchronised trajectories is doing nothing 38.5% of the window. Stagger their
+starts by half a tool call and that drops to 18.0% — twenty points, with a
+standard deviation of zero across four reps. The pauses get filled.
+
+**And the mean moves the wrong way, which is the finding the design did not
+anticipate.** Mean running count *falls*, 1.2477 to 1.2010. The distribution
+shows why:
+
+    SYNC   0: 39%   1:  1%   2: 60%
+    STAG   0: 18%   1: 46%   2: 36%
+
+Staggering converts time at 2 into time at 1, and time at 0 into time at 1. The
+first shift costs more than the second gains, so the mean drops while the GPU is
+demonstrably busier. **A capacity calculation based on the mean would conclude
+that staggered arrival packs *worse*, and it would be wrong.**
+
+This is the second time in this project that the mean and the distribution
+disagree, and the second time the distribution was right. The gate-1 rehearsal
+had already shown it on a stub — 0.729 against 0.709, a difference of nothing,
+while the fraction moved 59 points — which is why the fraction was named primary
+before any node was booked.
+
+**Guardrail: passed.** Tool wall is identical at 15.00s by construction, and
+generating time is 25.96s against 25.75s. The two arms did the same work in the
+same time; only the phase between them changed.
+
+**What this means for the packing bound.** ADR-0010's bound was measured under
+lockstep, where trajectories share their idle. Under staggered arrival they do
+not, and the replica is idle half as often — so the bound is not wrong, but the
+quantity it was derived from behaves differently once arrival is realistic. A
+fleet sized on lockstep numbers is sized on the least favourable phase.
+
+## What this still does not settle
+
+**One offset, one N.** 2.5s at N=2 shows the effect exists and is large. It does
+not give the shape: whether a smaller stagger suffices, whether the benefit
+saturates, or what happens at N=4 or N=8 where more trajectories compete for the
+same batch. Those are sweeps, and this single point is what justifies paying for
+one.
+
+**And synthetic trajectories are the hard case, not the easy one.** These differ
+only in start time — same length, same tool count, same generation sizes. Real
+agents differ in all of those, which decorrelates them further. The 20-point
+reduction measured here is therefore a floor rather than a ceiling.
+
+Cost: about $0.60.
