@@ -22,9 +22,18 @@ from this data and then
 says how many trajectories fit before the arithmetic breaks. That is capacity
 planning for agent infrastructure, measured rather than modelled.
 
-The limit travels with it: in the bound test the trajectories ran in lockstep
-and shared their idle time instead of interleaving, so the packing figure holds
-for synchronised replicas and the staggered case is still open.
+That bound was measured under lockstep — the trajectories ran in step and shared
+their idle instead of interleaving — so a third campaign
+[staggered the starts](hack/adr0010-interleaving) to see what changes. It
+changes a lot: offsetting two trajectories by half a tool call takes the time
+the replica spends doing **nothing** from 38.5% to 18.0% of the window, with a
+standard deviation of zero across four reps. The pauses get filled.
+
+And the mean running count *falls* while the GPU gets busier, 1.2477 to 1.2010,
+because staggering trades time at two concurrent requests for time at one. A
+capacity calculation built on the mean would read realistic arrival as packing
+*worse* — which is why the primary metric here is the distribution, fixed as
+such before the run.
 
 ## First axis: energy against cache reuse
 
