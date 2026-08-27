@@ -107,10 +107,26 @@ measuring the same workload.
 
 ## Gates
 
-**1. Zero-cost rehearsal.** The stub from the previous experiment
-(`../adr0010-interleaving/stub.py`) already separates the arms at N=2. Extend it
-to N=4 and N=8 and confirm the analysis still distinguishes them — a harness
-that collapses the arms on a stub will collapse them on hardware.
+**1. Zero-cost rehearsal — PASSED 2026-08-27.** `stub.py` parameterised on N,
+driven by `probe2.py` at 250ms:
+
+    N   SYNC idle   STAG idle    gap
+    2      63.6%       34.3%   +29.2 pp
+    4      62.8%        8.3%   +54.5 pp
+    8      62.8%        7.3%   +55.5 pp
+
+The analysis separates the arms at every N, which is what this gate is for.
+
+**It also flags that the hypothesis is at risk.** On the stub the gap *widens*
+rather than narrowing, because SYNC idle stays flat at ~63% however many threads
+run: they start together, have identical durations, and therefore never drift
+out of phase. Adding threads adds nothing.
+
+That is a property of the stub, not a prediction. Its trajectories are
+deterministically identical; vLLM's share a real batch with generation times
+that vary, so lockstep may break down on its own at higher N in a way the stub
+cannot show. The rehearsal proves the instrument works — it does not forecast
+the result, and the criterion above stays exactly as written.
 
 **2. Pre-flight on the node, with an abort criterion.** Run one N=2 SYNC rep
 first. It must reproduce the record: idle at `running == 0` near 38.5%, `running
