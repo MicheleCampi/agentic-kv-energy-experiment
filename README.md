@@ -1,7 +1,11 @@
 # agentic-kv-energy-experiment
 
-Two measured axes on one agentic ReAct workload, on rented GPUs, with the
-design written down before each node was switched on:
+**What does it cost to run agents on your own GPUs, and what should you build to
+make it cheaper?** Five controlled campaigns, 77 measured cells, each with its
+criterion fixed before the node was switched on — and the answer to the second
+half turned out to be *nothing*.
+
+It starts with two axes:
 
 - **energy against cache reuse** — tokens/joule across KV-cache hit-rate
   regimes (Qwen2.5-32B, H100 SXM5, 18 cells);
