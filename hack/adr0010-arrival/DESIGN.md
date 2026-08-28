@@ -120,9 +120,26 @@ are not balanced and the rows are not comparable.
 
 ## Gates
 
-**1. Zero-cost rehearsal.** Extend the stub to draw exponential gaps and to vary
-thread durations, then confirm the analysis separates SYNC, POISSON and SPACED.
-Three regimes that collapse into two on a stub will collapse on hardware too.
+**1. Zero-cost rehearsal — PASSED 2026-08-28.** `stub.py` extended to draw
+exponential gaps and to vary thread durations; `probe3.py` runs all six cells at
+N=8:
+
+                    SYNC    POISSON   SPACED    free    earned
+    homogeneous    63.6%     15.0%     7.3%   +48.6     +7.7
+    heterogeneous  31.7%     15.2%    12.4%   +16.5     +2.8
+
+The three regimes separate in both rows, which is what this gate is for.
+
+**And the rehearsal already points where the hypothesis says.** Making the
+threads heterogeneous halves SYNC idle on its own — 63.6% to 31.7% — with no
+scheduler involved: different durations decorrelate them for free. `earned`
+falls from 7.7pp to 2.8pp, below the 5pp threshold this design set for "not
+worth building".
+
+That is a stub, not vLLM. Threads sleeping on a timer are not requests sharing a
+continuous batch, and the absolute numbers mean nothing. But it does establish
+that the instrument can tell the three regimes apart, and that the split between
+free and earned is measurable rather than lost in noise.
 
 **2. Pre-flight, with an abort criterion.** One SYNC/homogeneous rep must
 reproduce ~37.7% idle at N=8. If it does not, the harness differs from the run
