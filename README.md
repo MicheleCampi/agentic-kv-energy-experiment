@@ -22,18 +22,38 @@ from this data and then
 says how many trajectories fit before the arithmetic breaks. That is capacity
 planning for agent infrastructure, measured rather than modelled.
 
-That bound was measured under lockstep — the trajectories ran in step and shared
-their idle instead of interleaving — so a third campaign
-[staggered the starts](hack/adr0010-interleaving) to see what changes. It
-changes a lot: offsetting two trajectories by half a tool call takes the time
-the replica spends doing **nothing** from 38.5% to 18.0% of the window, with a
-standard deviation of zero across four reps. The pauses get filled.
+That bound was measured under lockstep, and three more campaigns went after what
+that meant. They are worth reading in order, because **the last one overturns
+the first two**.
 
-And the mean running count *falls* while the GPU gets busier, 1.2477 to 1.2010,
-because staggering trades time at two concurrent requests for time at one. A
-capacity calculation built on the mean would read realistic arrival as packing
-*worse* — which is why the primary metric here is the distribution, fixed as
-such before the run.
+[Staggering the starts](hack/adr0010-interleaving) of two trajectories by half a
+tool call took idle time from 38.5% to 18.0%.
+[Raising concurrency](hack/adr0010-concurrency) to N=4 and N=8 made the gap
+*wider*, not narrower — 37.5 points, saturating — because synchronised
+trajectories stay idle 37.7% of the time however many there are.
+
+Then [the arrival campaign](hack/adr0010-arrival) removed the assumption all
+three shared: that trajectories are identical apart from start time. Give them
+different lengths and generation sizes, the way real agents differ, and
+**lockstep collapses on its own** — synchronised idle falls from 37.7% to 11.1%
+with nothing scheduling anything. Let them arrive at random and it reaches
+**0.3%**. Spacing them deliberately, the policy an admission controller would
+implement, makes it **worse**: −2.1 points against unmanaged arrival, because
+even spacing pushes trajectories back toward a common phase that random gaps
+keep them out of.
+
+So the honest conclusion is a **negative build recommendation**: do not write an
+admission controller to space agent trajectories. The idle it would recover
+mostly is not there once the trajectories are realistic. The earlier numbers
+were correctly measured and were an artefact of clones — which the designs said
+in advance was their weakest assumption.
+
+One methodological finding travels with all of them: the **mean** running count
+*falls* while the GPU gets busier, because staggering trades time at two
+concurrent requests for time at one. A capacity calculation built on the average
+reads the better arrangement as packing *worse*. The primary metric was fixed as
+the distribution before any node was booked, which is the only reason these runs
+produced results instead of shrugs.
 
 ## First axis: energy against cache reuse
 
