@@ -30,6 +30,7 @@ are engine-side only.
 import argparse
 import json
 import os
+import random
 import subprocess
 import sys
 import time
@@ -75,7 +76,27 @@ def scrape_running(metrics_url, timeout=2.0):
 def replay_argv(a, idx, steps_path):
     """argv of one replay arm. Seeds differ per trajectory so the N are
     not bit-identical requests the engine could collapse; everything
-    else is the fixed structure the cost campaign pinned."""
+    else is the fixed structure the cost campaign pinned.
+
+    With --heterogeneous, the shape varies per trajectory too. Real agents
+    are not clones of each other: they run different numbers of steps and
+    generate different amounts. Identical trajectories are the strongest
+    case for staggering and the weakest for lockstep, because clones cannot
+    drift apart on their own — so measuring only them overstates what an
+    admission policy would buy.
+
+    The variation is deterministic in idx, not random: the same idx always
+    produces the same shape, so an arm is reproducible from its argv alone.
+    """
+    n_llm, n_tool, max_tokens = a.n_llm, a.n_tool, a.max_tokens
+    if a.heterogeneous:
+        # Spread around the homogeneous baseline (4 LLM calls, 3 tools, 192
+        # tokens) so the mean workload per trajectory is unchanged and only
+        # its dispersion differs. Cycling on idx keeps totals stable across
+        # N, which is what makes arms at different N comparable at all.
+        n_llm = (3, 4, 5, 4)[idx % 4]
+        n_tool = n_llm - 1
+        max_tokens = (128, 192, 256, 192)[idx % 4]
     return [
         str(a.python), str(Path(a.driver) / "run_replay.py"),
         "--base-url", a.base_url,
@@ -83,9 +104,9 @@ def replay_argv(a, idx, steps_path):
         "--steps-file", str(steps_path),
         "--tool-latency-s", str(a.tool_latency_s),
         "--tool-latency-cv", str(a.tool_latency_cv),
-        "--n-llm", str(a.n_llm),
-        "--n-tool", str(a.n_tool),
-        "--max-tokens", str(a.max_tokens),
+        "--n-llm", str(n_llm),
+        "--n-tool", str(n_tool),
+        "--max-tokens", str(max_tokens),
         "--seed", str(a.seed_base + idx),
     ]
 
@@ -114,10 +135,18 @@ def run_arm(a, out_dir):
     # script, same seeds, same request pattern. The only difference between
     # the arms is when each process begins, which is what the experiment is
     # about.
+    # Arrival process. `fixed` spaces starts evenly, which is a policy a
+    # scheduler could implement. `poisson` draws each gap from an exponential
+    # with the same mean, which is what unmanaged arrival looks like — the
+    # comparison between them is the whole point: it separates "spacing helps"
+    # from "any decorrelation helps".
+    rng = random.Random(a.seed_base)
     procs = []
     for i in range(a.n):
         if i and a.start_offset_s > 0:
-            time.sleep(a.start_offset_s)
+            gap = (rng.expovariate(1.0 / a.start_offset_s)
+                   if a.arrival == "poisson" else a.start_offset_s)
+            time.sleep(gap)
         procs.append(
             subprocess.Popen(argv[f"replay-{i}"], stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, text=True)
@@ -161,7 +190,7 @@ def run_arm(a, out_dir):
     return 0
 
 
-def analyse(out_dir, start_offset_s=0.0):
+def analyse(out_dir, start_offset_s=0.0, arrival="fixed", heterogeneous=False):
     """Apply the declared window and report both readings.
 
     Returns a dict, also written to analysis.json. The untrimmed mean is
@@ -222,6 +251,8 @@ def analyse(out_dir, start_offset_s=0.0):
         # it is the direct measure of interleaving, and it was exactly
         # zero across every sample of the ADR-0010 lockstep run.
         "start_offset_s": start_offset_s,
+        "arrival": arrival,
+        "heterogeneous": heterogeneous,
         "running_eq_one_fraction": (
             sum(1 for v in inwin if v == 1) / len(inwin) if inwin else None
         ),
@@ -261,6 +292,16 @@ def main():
     p.add_argument("--n-tool", type=int, default=3)
     p.add_argument("--max-tokens", type=int, default=192)
     p.add_argument("--seed-base", type=int, default=42)
+    p.add_argument("--heterogeneous", action="store_true",
+                   help="vary steps and generation size per trajectory "
+                        "around the same mean, so the N are not clones. "
+                        "Clones cannot drift apart on their own, which "
+                        "makes lockstep artificially persistent.")
+    p.add_argument("--arrival", choices=["fixed", "poisson"], default="fixed",
+                   help="fixed applies --start-offset-s between starts. "
+                        "poisson draws each gap from an exponential with "
+                        "that mean, which is how requests actually arrive: "
+                        "neither synchronised nor evenly spaced.")
     p.add_argument("--start-offset-s", type=float, default=0.0,
                    help="delay between successive replica starts. 0 "
                         "reproduces the lockstep condition ADR-0010 "
@@ -284,7 +325,7 @@ def main():
     out_dir = Path(a.out_dir)
 
     if a.analyse_only:
-        res = analyse(out_dir, a.start_offset_s)
+        res = analyse(out_dir, a.start_offset_s, a.arrival, a.heterogeneous)
         print(json.dumps(res, indent=1))
         return 0 if "error" not in res else 1
 
@@ -296,7 +337,7 @@ def main():
         return 0
 
     rc = run_arm(a, out_dir)
-    res = analyse(out_dir, a.start_offset_s)
+    res = analyse(out_dir, a.start_offset_s, a.arrival, a.heterogeneous)
     print(json.dumps(res, indent=1))
     if "error" in res:
         return 1
