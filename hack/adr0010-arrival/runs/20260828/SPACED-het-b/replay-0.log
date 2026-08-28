@@ -1,0 +1,5 @@
+steps: 5 (llm_call=3, tool=2)
+overlapping consecutive segments: 0
+non-positive spans: 0
+span: 23.3s (tool wall 10.0s measured, 5.0s/tool requested, 42.9% of span)
+meta: /home/ubuntu/ar-runs/SPACED-het-b/steps-0.jsonl.meta.json

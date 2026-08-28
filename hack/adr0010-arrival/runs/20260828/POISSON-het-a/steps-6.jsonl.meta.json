@@ -1,0 +1,25 @@
+{
+ "arm": "replay",
+ "base_url": "http://127.0.0.1:8000/v1",
+ "max_tokens": 256,
+ "model": "Qwen/Qwen2.5-7B-Instruct",
+ "n_llm_call": 5,
+ "n_llm_planned": 5,
+ "n_steps": 9,
+ "n_tool": 4,
+ "n_tool_planned": 4,
+ "observed_span_s": 63.571834058,
+ "seed": 48,
+ "steps_file": "/home/ubuntu/ar-runs/POISSON-het-a/steps-6.jsonl",
+ "t_end_unix_ns": 1787941839057649185,
+ "t_start_unix_ns": 1787941775485815127,
+ "tool_latency_cv": 0.0,
+ "tool_latency_realised_s": [
+  5.0,
+  5.0,
+  5.0,
+  5.0
+ ],
+ "tool_latency_s": 5.0,
+ "tool_wall_s": 20.000371711
+}

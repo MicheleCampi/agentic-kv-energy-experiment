@@ -174,4 +174,57 @@ one.
 
 ## Measured results (outputs)
 
-To be filled after the run, beside the design rather than in place of it.
+Run 2026-08-28, 1×A10 on Lambda, driver 580.105.08, vLLM 0.23.0,
+Qwen2.5-7B-Instruct, `--enforce-eager`, N=8, mean gap 2.5s, 18 arms, order
+counterbalanced. Evidence: `runs/20260828/`. Zero failed scrapes.
+
+**Verdict against the criterion fixed before the run: do not build it.**
+
+| | SYNC | POISSON | SPACED | free | earned |
+|---|---|---|---|---|---|
+| homogeneous | 37.7% (0.9) | 0.6% (0.0) | 0.4% (0.3) | +37.2 | **+0.2** |
+| heterogeneous | 11.1% (0.2) | 0.3% (0.2) | 2.4% (0.0) | +10.8 | **−2.1** |
+
+`earned` — what an admission controller would add over unmanaged arrival — is
+**−2.1 percentage points** on realistic trajectories. Not merely below the 5pp
+threshold: **negative**. Deliberately spacing starts is *worse* than letting them
+land where they land.
+
+**Three findings, in order of how much they change the picture.**
+
+**1. Heterogeneity destroys lockstep on its own.** SYNC idle falls from 37.7% to
+**11.1%** with nothing scheduling anything. Trajectories of different shapes
+drift apart by themselves, which is exactly what the previous three campaigns
+could not show, because their trajectories were clones.
+
+**2. Unmanaged arrival then takes idle to almost nothing.** POISSON sits at
+**0.3%**. There is no meaningful idle left for a scheduler to recover.
+
+**3. Fixed spacing makes it worse, and the reason is legible.** SPACED
+reintroduces a regularity that Poisson does not have: evenly spaced starts push
+trajectories back toward a common phase, where exponential gaps keep them apart.
+The policy an admission controller would implement is the one that partially
+recreates the problem.
+
+**What the previous result becomes.** The 37.5pp gap measured on 2026-08-28 was
+real and correctly measured, and it is an artefact of clones. On this workload,
+with trajectories that differ the way real ones do, **the idle that staggering
+recovered mostly is not there to begin with**.
+
+**Guardrail: passed.** Mean generating time runs 26.45s to 27.59s across all six
+cells — under 4.3% spread — and within each row the three regimes agree to
+0.35s. The dispersion of 11s in the heterogeneous rows is the heterogeneity
+itself, by construction. The idle differences are phase, not workload.
+
+## What this still does not settle
+
+**One mean gap, one workload shape.** 2.5s across all regimes; dispersion of
+3/4/5 calls and 128/192/256 tokens. Real traffic is likely wider and
+heavier-tailed, which would decorrelate more — so this is a conservative test of
+"spacing is not needed", and a wider spread would only strengthen it.
+
+**And it says nothing about admission control for other reasons.** Cost,
+fairness, priority and cache locality are all reasons to control admission that
+this experiment does not touch. What it rules out is admitting *for phase*.
+
+Cost: about $1.70.

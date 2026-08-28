@@ -1,0 +1,5 @@
+steps: 5 (llm_call=3, tool=2)
+overlapping consecutive segments: 0
+non-positive spans: 0
+span: 23.2s (tool wall 10.0s measured, 5.0s/tool requested, 43.0% of span)
+meta: /home/ubuntu/ar-runs/gate3/steps-4.jsonl.meta.json

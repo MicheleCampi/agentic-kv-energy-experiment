@@ -1,0 +1,24 @@
+{
+ "arm": "replay",
+ "base_url": "http://127.0.0.1:8000/v1",
+ "max_tokens": 192,
+ "model": "Qwen/Qwen2.5-7B-Instruct",
+ "n_llm_call": 4,
+ "n_llm_planned": 4,
+ "n_steps": 7,
+ "n_tool": 3,
+ "n_tool_planned": 3,
+ "observed_span_s": 41.69980861,
+ "seed": 48,
+ "steps_file": "/home/ubuntu/ar-runs/SYNC-hom-a/steps-6.jsonl",
+ "t_end_unix_ns": 1787941758163926185,
+ "t_start_unix_ns": 1787941716464117575,
+ "tool_latency_cv": 0.0,
+ "tool_latency_realised_s": [
+  5.0,
+  5.0,
+  5.0
+ ],
+ "tool_latency_s": 5.0,
+ "tool_wall_s": 15.000415385
+}

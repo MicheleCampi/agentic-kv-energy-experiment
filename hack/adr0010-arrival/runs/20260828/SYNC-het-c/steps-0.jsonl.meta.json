@@ -1,0 +1,23 @@
+{
+ "arm": "replay",
+ "base_url": "http://127.0.0.1:8000/v1",
+ "max_tokens": 128,
+ "model": "Qwen/Qwen2.5-7B-Instruct",
+ "n_llm_call": 3,
+ "n_llm_planned": 3,
+ "n_steps": 5,
+ "n_tool": 2,
+ "n_tool_planned": 2,
+ "observed_span_s": 23.376058045,
+ "seed": 42,
+ "steps_file": "/home/ubuntu/ar-runs/SYNC-het-c/steps-0.jsonl",
+ "t_end_unix_ns": 1787942768755114372,
+ "t_start_unix_ns": 1787942745379056327,
+ "tool_latency_cv": 0.0,
+ "tool_latency_realised_s": [
+  5.0,
+  5.0
+ ],
+ "tool_latency_s": 5.0,
+ "tool_wall_s": 10.000318801
+}
