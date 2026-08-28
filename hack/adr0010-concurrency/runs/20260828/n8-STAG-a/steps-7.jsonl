@@ -1,0 +1,7 @@
+{"step_id": 1, "kind": "llm_call", "t_start_unix_ns": 1787939318814927093, "t_end_unix_ns": 1787939325628782842}
+{"step_id": 2, "kind": "tool", "t_start_unix_ns": 1787939325628882657, "t_end_unix_ns": 1787939330628990839}
+{"step_id": 3, "kind": "llm_call", "t_start_unix_ns": 1787939330629131690, "t_end_unix_ns": 1787939337200719396}
+{"step_id": 4, "kind": "tool", "t_start_unix_ns": 1787939337200796989, "t_end_unix_ns": 1787939342200895582}
+{"step_id": 5, "kind": "llm_call", "t_start_unix_ns": 1787939342201000148, "t_end_unix_ns": 1787939348792478542}
+{"step_id": 6, "kind": "tool", "t_start_unix_ns": 1787939348792585861, "t_end_unix_ns": 1787939353792667872}
+{"step_id": 7, "kind": "llm_call", "t_start_unix_ns": 1787939353792781967, "t_end_unix_ns": 1787939360263979693}

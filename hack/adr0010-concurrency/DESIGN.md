@@ -163,4 +163,53 @@ for staggering, not the realistic one.
 
 ## Measured results (outputs)
 
-To be filled after the run, beside the design rather than in place of it.
+Run 2026-08-28, 1×A10 on Lambda, driver 580.105.08, vLLM 0.23.0,
+Qwen2.5-7B-Instruct, `--enforce-eager`, 18 arms, order counterbalanced.
+Evidence: `runs/20260828/`. Zero failed scrapes across all eighteen.
+
+**Verdict against the criterion fixed before the run: the hypothesis is wrong.**
+
+| N | SYNC idle | STAGGERED idle | gap |
+|---|---|---|---|
+| 2 | 38.0% (sd 0.8) | 17.7% (sd 0.4) | **+20.3 pp** |
+| 4 | 37.7% (sd 0.3) | 0.2% (sd 0.3) | **+37.5 pp** |
+| 8 | 37.7% (sd 0.2) | 0.2% (sd 0.3) | **+37.5 pp** |
+
+The criterion said below 5pp at N=8 confirms the hypothesis and above 15pp
+refutes it. The measured gap is **37.5pp**, nowhere near either boundary.
+
+**The gap does not decay — it saturates.** It grows from 20.3pp to 37.5pp and
+then stops moving between N=4 and N=8. Staggering takes idle to essentially zero
+from N=4 onward.
+
+**And the reason is one column.** SYNC idle is *flat at 37.7% at every
+concurrency*, with a standard deviation under a point. Adding trajectories to a
+synchronised fleet recovers no idle time at all — they wait together however many
+there are. The prediction assumed that more trajectories in flight would make
+"at least one generating" approach certainty on its own. It does not, because
+under lockstep they are not independent draws: they are the same draw, repeated.
+
+**Guardrail: passed cleanly.** Tool wall is 15.00s by construction in every arm,
+and generating time runs 25.96s at N=2 to 26.72s at N=8 — **+2.9% across a
+fourfold increase in concurrency**. `num_requests_waiting` stayed at 0 and the
+cache holds 100,272 tokens (6267 blocks × 16), so the engine served eight
+trajectories almost as cheaply as two. Nothing here is queueing.
+
+**What it means for sizing a fleet.** Arrival order is not a small-fleet detail
+that washes out at scale. On this workload it is the dominant factor and stays
+dominant: a replica serving synchronised trajectories is idle 38% of the time
+whether it holds two or eight, and staggering their starts recovers all of it.
+
+## What this still does not settle
+
+**Trajectories identical apart from start time.** This is the strongest possible
+case for staggering and the weakest for SYNC — real agents differ in length, tool
+count and generation size, and decorrelate on their own. Whether SYNC idle stays
+flat when the trajectories are heterogeneous is the obvious next question, and
+this design cannot answer it.
+
+**Three points, one offset, one node.** N ∈ {2,4,8} shows saturation between 4
+and 8; it does not locate the knee, and says nothing about N=32 or about whether
+2.5s remains the right stagger at higher concurrency.
+
+Cost: about $1.60.
