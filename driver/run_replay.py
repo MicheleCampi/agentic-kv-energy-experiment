@@ -87,6 +87,16 @@ def main() -> int:
                    help="tokens generated per LLM call. Fixed so that span "
                         "varies with engine throughput, not with how much "
                         "the model felt like saying.")
+    p.add_argument("--max-retries", type=int, default=0,
+                   help="retries per LLM call when the endpoint fails. "
+                        "0 reproduces the previous behaviour exactly: an "
+                        "exception ends the trajectory. The preemption "
+                        "campaign raises it, because a trajectory that "
+                        "dies measures nothing about recovery cost.")
+    p.add_argument("--retry-backoff-s", type=float, default=2.0,
+                   help="wait between retries. Fixed rather than "
+                        "exponential so the recovery cost measured is the "
+                        "engine's, not the backoff policy's.")
     p.add_argument("--seed", type=int, default=42)
     args = p.parse_args()
 
@@ -122,14 +132,41 @@ def main() -> int:
     for i in range(args.n_llm):
         run_id = uuid.uuid4()
         handler.begin_step(run_id, "llm_call")
-        resp = client.chat.completions.create(
-            model=args.model,
-            messages=messages,
-            temperature=0.0,
-            seed=args.seed,
-            max_tokens=args.max_tokens,
+        # Retry on failure, resending the whole conversation. That is what a
+        # real agent does: the state lives in the client, so when the endpoint
+        # it was talking to disappears the accumulated context has to go back
+        # over the wire and be reprocessed. The cost of losing a replica
+        # mid-trajectory is exactly that context, and measuring it is the point
+        # of the preemption campaign — a retry that resent only the last turn
+        # would measure something cheaper than what actually happens.
+        resp = None
+        attempts = 0
+        first_failure_ns = None
+        while resp is None:
+            try:
+                resp = client.chat.completions.create(
+                    model=args.model,
+                    messages=messages,
+                    temperature=0.0,
+                    seed=args.seed,
+                    max_tokens=args.max_tokens,
+                )
+            except Exception as exc:
+                attempts += 1
+                if first_failure_ns is None:
+                    first_failure_ns = time.time_ns()
+                if attempts > args.max_retries:
+                    print(f"step {i}: giving up after {attempts} attempts: {exc}",
+                          file=sys.stderr)
+                    raise
+                time.sleep(args.retry_backoff_s)
+        handler.end_step(
+            run_id,
+            prompt_tokens=getattr(resp.usage, "prompt_tokens", None),
+            completion_tokens=getattr(resp.usage, "completion_tokens", None),
+            retries=attempts,
+            first_failure_ns=first_failure_ns,
         )
-        handler.end_step(run_id)
         text = resp.choices[0].message.content or ""
         messages.append({"role": "assistant", "content": text})
 

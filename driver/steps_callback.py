@@ -40,11 +40,18 @@ class StepsFileCallback(BaseCallbackHandler):
     def _start(self, run_id: UUID, kind: str) -> None:
         self.begin_step(run_id, kind)
 
-    def end_step(self, key: UUID) -> None:
-        """Close a step segment opened by begin_step."""
-        self._end(key)
+    def end_step(self, key: UUID, **extra) -> None:
+        """Close a step segment opened by begin_step.
 
-    def _end(self, run_id: UUID) -> None:
+        Extra keys are written alongside the timing fields, with None values
+        dropped so a step that carries no such data looks exactly as it did
+        before. The preemption campaign uses this for prompt_tokens (the
+        context a retry has to resend), retries, and the instant of first
+        failure — none of which the timing fields can express.
+        """
+        self._end(key, extra)
+
+    def _end(self, run_id: UUID, extra: dict | None = None) -> None:
         entry = self._open_runs.pop(run_id, None)
         if entry is None:
             return  # end without start: ignore, never fabricate a segment
@@ -52,6 +59,7 @@ class StepsFileCallback(BaseCallbackHandler):
         t_end = time.time_ns()
         self._seq += 1
         record = {
+            **{k: v for k, v in (extra or {}).items() if v is not None},
             "step_id": self._seq,
             "kind": kind,
             "t_start_unix_ns": t_start,
