@@ -56,19 +56,51 @@ compares against.
 - **CONTROL** — trajectories run to completion, nothing preempted. Establishes
   the baseline cost of a turn.
 - **EARLY** — preemption injected while trajectories are at turn 1.
-- **LATE** — injected at turn 4, the last LLM call.
+- **LATE** — injected at turn 3, by which point the trajectory carries two turns of accumulated context.
 - **DRAIN-ONLY** — the node is marked draining but no replica is lost, to
   separate the cost of the replacement from the cost of the notice.
 
-Preemption is injected by patching `preemptionNoticeDetected` on the NodeState
-status at a chosen instant. The operator's state machine does the rest —
-`Draining` then `Rescheduling` — which is behaviour already tested on hardware,
-not something this experiment adds.
+**How the replica is actually lost, and why not through the operator.**
 
-**Timing the injection is the whole difficulty.** A trajectory takes ~41s with
-5.0 s/tool: turn 1 lands around t+2s and turn 4 around t+32s. The injector
-sleeps to those marks. A miss makes the arm invalid rather than merely noisy,
-which is why gate 2 verifies the mark before any measured rep.
+The first attempt injected `preemptionNoticeDetected` on the NodeState and
+expected the trajectories to feel it. They did not, and the gate caught it: the
+operator orchestrates `VllmService` children, while the load here talks to an
+engine started by hand on the node. Two tracks that never meet — the node was
+marked preempted, nothing served by it moved, and no trajectory saw a failure.
+
+Building the full topology would fix that: a FleetService owning real vLLM
+replicas, traffic routed through the dispatcher to the placed child's Service.
+It was priced during the session at roughly forty extra minutes and double the
+budget — a vLLM image on three nodes, model weights cached on each, and several
+new ways to fail with the meter running.
+
+**It was not worth it, because it is not what this measures.** That the operator
+places a replacement in 57s is already measured and published (ADR-0009). What
+is new here is what a preemption costs a trajectory carrying context, and that
+number is identical whether the replacement is chosen by an operator or restored
+by hand. The full topology would add the mechanism, not the answer.
+
+So the replica is lost by killing the vLLM process on the node, with the notice
+injected alongside so the operator sees and reacts as it would. The replacement
+is restored manually.
+
+**The limit that creates, stated here rather than discovered later:** this
+measures the cost to the agent, not the operator's replacement policy under
+agentic load. Those are separable questions and this design answers the first.
+
+**Timing the injection is the whole difficulty, and the session retuned it.**
+Measured on the node: a trajectory spans 41.6s, giving 6.7s of generation per
+turn between 5.0s tool calls. Turn 1 runs t+0 to t+6.7s, turn 3 runs t+23.3 to
+t+30.0s, turn 4 starts at t+35.0s.
+
+And the engine takes **28s to come back** after being killed, with weights warm
+in the page cache. That number decides the marks: a kill at turn 4 would find
+the trajectory finished before the engine returned, measuring nothing.
+
+So **EARLY is t+2s (turn 1)** and **LATE is t+27s (turn 3)** — not turn 4 as
+first drafted. The contrast survives the change: at turn 1 a trajectory resends
+its opening context, at turn 3 it resends two turns of accumulated
+conversation.
 
 ## Frozen inputs
 
@@ -76,7 +108,7 @@ which is why gate 2 verifies the mark before any measured rep.
 |---|---|---|
 | fleet | 3× A10, k3s, operator in-cluster | matches the ADR-0009 preemption topology |
 | N trajectories | 4 | enough to see a distribution, small enough to fit one replica |
-| injection marks | t+2s (EARLY), t+32s (LATE) | turn 1 and turn 4 of a ~41s trajectory |
+| injection marks | t+2s (EARLY), t+27s (LATE) | turn 1 and turn 3; turn 4 starts at t+35s and the engine needs 28s to return |
 | retries | `--max-retries 10`, backoff 2.0s fixed | a trajectory that dies measures nothing |
 | tool latency | 5.0 s/tool | matrix invariant across all campaigns |
 | trajectory shape | 4 LLM calls, 3 tools, 192 tokens | unchanged |
