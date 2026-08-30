@@ -1,9 +1,11 @@
 # agentic-kv-energy-experiment
 
 **What does it cost to run agents on your own GPUs, and what should you build to
-make it cheaper?** Five controlled campaigns, 77 measured cells, each with its
+make it cheaper?** Six controlled campaigns, 86 measured cells, each with its
 criterion fixed before the node was switched on — and the answer to the second
-half turned out to be *nothing*.
+half keeps turning out to be *nothing*. Three of the six overturned a hypothesis
+I had written down in advance, twice by correcting an earlier campaign of my
+own.
 
 It starts with two axes:
 
@@ -51,6 +53,28 @@ admission controller to space agent trajectories. The idle it would recover
 mostly is not there once the trajectories are realistic. The earlier numbers
 were correctly measured and were an artefact of clones — which the designs said
 in advance was their weakest assumption.
+
+A sixth campaign asked what a *failure* costs rather than what a schedule saves:
+[what does losing a replica cost an agent mid-trajectory](hack/adr0011-preemption).
+An agent four turns in is not a stateless request — it carries thousands of
+tokens of context living in the replica's cache, and the obvious expectation is
+that losing it late costs more than losing it early.
+
+**It costs less.** A trajectory preempted at turn 1 resends 47 tokens and pays
+**28.8s**; the same trajectory preempted at turn 3 resends **477** — ten times
+the context — and pays **23.8s**. The cost is the engine restarting, ~28s with
+weights warm, and the extra prefill disappears inside it. So preemption cost for
+an agent is a **constant**, which is the friendlier answer: a constant can be
+added to a capacity model, a function of where every agent happened to be
+cannot.
+
+**And the session found something worth as much as the result.** A request in
+flight when the engine dies does not fail — *it hangs*. The OpenAI client
+defaults to a ten-minute timeout, and an interrupted turn sat at **607 seconds
+with zero retries**, waiting on a process that no longer existed. An agent with
+default settings does not notice it has lost its replica. Every retry path in
+the design was unreachable until an explicit timeout turned the hang into a
+failure.
 
 One methodological finding travels with all of them: the **mean** running count
 *falls* while the GPU gets busier, because staggering trades time at two
