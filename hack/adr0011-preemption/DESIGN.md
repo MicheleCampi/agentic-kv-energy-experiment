@@ -193,4 +193,59 @@ frameworks do today, and is the honest baseline.
 
 ## Measured results (outputs)
 
-To be filled after the run, beside the design rather than in place of it.
+Run 2026-08-30, 3×A10 on Lambda, driver 580.105.08, k3s v1.36.4, vLLM 0.23.0,
+Qwen2.5-7B-Instruct, `--enforce-eager`, N=4, nine arms, order counterbalanced.
+Evidence: `runs/20260830/`.
+
+**Verdict against the criterion fixed before the run: the hypothesis is wrong,
+and wrong in the opposite direction.**
+
+| | preempted turn | prompt tokens resent | turn duration | cost over CONTROL |
+|---|---|---|---|---|
+| CONTROL | — | — | 6.5s median | — |
+| EARLY | 1 | **47** | 35.5s (sd 1.1) | **28.8s** |
+| LATE | 3 | **477** | 30.3s (sd 0.2) | **23.8s** |
+
+The criterion said LATE exceeding EARLY by more than 30% confirms the
+hypothesis. LATE is **17% cheaper**, while resending **ten times the context**.
+
+**The cost is the engine coming back, not the context coming with it.** A killed
+engine takes ~28s to restart with weights warm in the page cache, and that
+number is what both arms pay. The 477 tokens the late turn resends add under a
+second of prefill on top — visible in the arithmetic, invisible in the total.
+
+LATE is slightly *cheaper* because a kill at turn 3 finds the engine already
+warm from serving two turns, so it returns marginally sooner.
+
+**So preemption cost for an agent is a constant, not a function of progress.**
+That is the friendlier answer for anyone sizing a fleet — a constant can be
+added to a capacity model, a function of where every agent happened to be cannot
+— and the design named it as the outcome it expected to be wrong about.
+
+**What the session found on the way, which is worth as much as the result.**
+
+A request in flight when the engine dies **does not fail — it hangs**. The
+OpenAI client's default timeout is ten minutes, and an interrupted turn sat at
+**607s with zero retries**, waiting for a reply from a process that no longer
+existed. An agent with default settings does not notice a lost replica. Every
+retry path in the design was unreachable until an explicit timeout turned the
+hang into a failure.
+
+**Guardrail: passed.** CONTROL reproduces 6.4–6.7s per turn across all three
+reps and 15.00s tool wall, matching the span the earlier campaigns measured.
+
+## What this still does not settle
+
+**One restart path.** The engine is restarted on the same node with weights in
+the page cache. A replacement on a cold node, or one pulling weights over the
+network, would pay more — and the operator's own measurement (57s, ADR-0009)
+suggests roughly double.
+
+**Two injection points, one trajectory shape.** Turn 1 and turn 3 of a 4-call
+trajectory. Whether the constant holds for agents carrying tens of turns, where
+the context is large enough for prefill to matter, is not measured.
+
+**And the kill is not the operator's replacement.** Stated above and repeated
+here: this measures what the agent pays, not how the fleet reacts.
+
+Cost: about $4.20.

@@ -1,0 +1,20 @@
+{
+ "n_concurrent": 4,
+ "f_nongen_mean": 0.23184500023268909,
+ "predicted_running": 3.0726199990692438,
+ "observed_running_windowed": 2.7666666666666666,
+ "observed_running_untrimmed": 2.6948051948051948,
+ "window_ns": [
+  1788086131224821747,
+  1788086195857146397
+ ],
+ "window_secs": 64.63232465,
+ "samples_in_window": 150,
+ "start_offset_s": 0.0,
+ "arrival": "fixed",
+ "heterogeneous": false,
+ "running_eq_one_fraction": 0.0,
+ "samples_total": 263,
+ "failed_scrapes": 109,
+ "verdict": "BOUND SUPPORTED: observed within 15% of N*(1-f_nongen)"
+}

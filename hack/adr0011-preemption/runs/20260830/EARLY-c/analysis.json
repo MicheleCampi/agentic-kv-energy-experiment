@@ -1,0 +1,20 @@
+{
+ "n_concurrent": 4,
+ "f_nongen_mean": 0.21470133949779557,
+ "predicted_running": 3.1411946420088177,
+ "observed_running_windowed": 2.4096385542168677,
+ "observed_running_untrimmed": 2.3446327683615817,
+ "window_ns": [
+  1788087044145400628,
+  1788087113033268775
+ ],
+ "window_secs": 68.887868147,
+ "samples_in_window": 166,
+ "start_offset_s": 0.0,
+ "arrival": "fixed",
+ "heterogeneous": false,
+ "running_eq_one_fraction": 0.030120481927710843,
+ "samples_total": 287,
+ "failed_scrapes": 110,
+ "verdict": "INCONCLUSIVE: between the two criteria, closes nothing"
+}

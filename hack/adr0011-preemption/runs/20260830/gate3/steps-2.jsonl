@@ -1,0 +1,7 @@
+{"prompt_tokens": 47, "completion_tokens": 192, "retries": 0, "step_id": 1, "kind": "llm_call", "t_start_unix_ns": 1788083407083291226, "t_end_unix_ns": 1788083414367167761}
+{"step_id": 2, "kind": "tool", "t_start_unix_ns": 1788083414367261877, "t_end_unix_ns": 1788083419367404477}
+{"prompt_tokens": 262, "completion_tokens": 192, "retries": 0, "step_id": 3, "kind": "llm_call", "t_start_unix_ns": 1788083419367669359, "t_end_unix_ns": 1788083425800478154}
+{"step_id": 4, "kind": "tool", "t_start_unix_ns": 1788083425800584829, "t_end_unix_ns": 1788083430800679675}
+{"prompt_tokens": 477, "completion_tokens": 192, "retries": 0, "step_id": 5, "kind": "llm_call", "t_start_unix_ns": 1788083430800787514, "t_end_unix_ns": 1788083437274476759}
+{"step_id": 6, "kind": "tool", "t_start_unix_ns": 1788083437274557693, "t_end_unix_ns": 1788083442274654185}
+{"prompt_tokens": 692, "completion_tokens": 192, "retries": 0, "step_id": 7, "kind": "llm_call", "t_start_unix_ns": 1788083442274753194, "t_end_unix_ns": 1788083448766922536}
