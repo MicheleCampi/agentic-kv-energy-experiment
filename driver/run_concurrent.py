@@ -108,6 +108,7 @@ def replay_argv(a, idx, steps_path):
         "--n-tool", str(n_tool),
         "--max-tokens", str(max_tokens),
         "--seed", str(a.seed_base + idx),
+        "--request-timeout-s", str(a.request_timeout_s),
         "--max-retries", str(a.max_retries),
         "--retry-backoff-s", str(a.retry_backoff_s),
     ]
@@ -294,6 +295,8 @@ def main():
     p.add_argument("--n-tool", type=int, default=3)
     p.add_argument("--max-tokens", type=int, default=192)
     p.add_argument("--seed-base", type=int, default=42)
+    p.add_argument("--request-timeout-s", type=float, default=600.0,
+                   help="passed through to each replay.")
     p.add_argument("--max-retries", type=int, default=0,
                    help="passed through to each replay. 0 keeps the "
                         "previous behaviour: a failed call ends the "

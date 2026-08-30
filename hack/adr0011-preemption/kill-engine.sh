@@ -10,8 +10,26 @@
 # what a trajectory pays while its replica is gone and coming back, not to
 # measure an outage of unbounded length.
 set -uo pipefail
-MARK="${1:?seconds after load start}"
+# Two ways to choose the moment. A fixed MARK is simple and was wrong three
+# times in one session: turn boundaries move with engine state, so a mark tuned
+# on one run lands in a tool call on the next. Passing a STEPS file and a TURN
+# instead waits until that trajectory has actually reached that turn, which is
+# the condition the arm is defined by rather than a proxy for it.
+MARK="${1:?seconds after load start, or 0 with STEPS/TURN}"
 NODE="${2:-}"
+STEPS="${3:-}"
+TURN="${4:-}"
+
+if [ -n "$STEPS" ] && [ -n "$TURN" ]; then
+  for _ in $(seq 1 600); do
+    n=$(grep -c '"kind": "llm_call"' "$STEPS" 2>/dev/null | head -1)
+    n=${n:-0}
+    [ "$n" -ge "$((TURN - 1))" ] && break
+    sleep 0.2
+  done
+  sleep 1   # into the turn, not at its edge
+  MARK=0
+fi
 K="${K:-sudo k3s kubectl}"
 
 sleep "$MARK"

@@ -87,6 +87,12 @@ def main() -> int:
                    help="tokens generated per LLM call. Fixed so that span "
                         "varies with engine throughput, not with how much "
                         "the model felt like saying.")
+    p.add_argument("--request-timeout-s", type=float, default=600.0,
+                   help="per-request timeout. The default matches the "
+                        "OpenAI client default, so behaviour is unchanged "
+                        "unless set. The preemption campaign lowers it, "
+                        "because a request hanging on a dead engine never "
+                        "reaches the retry path.")
     p.add_argument("--max-retries", type=int, default=0,
                    help="retries per LLM call when the endpoint fails. "
                         "0 reproduces the previous behaviour exactly: an "
@@ -113,7 +119,16 @@ def main() -> int:
     rng = random.Random(args.seed)
     latencies = []
 
-    client = OpenAI(base_url=args.base_url, api_key="dummy")
+    # An explicit timeout, because the default is ten minutes and a request
+    # in flight when the engine dies does not fail — it hangs. Measured
+    # during the preemption session: a turn interrupted mid-generation sat
+    # at 607s with zero retries, because the client was still waiting for a
+    # reply from a process that no longer existed. That is worth knowing in
+    # its own right: an agent with default settings does not notice a lost
+    # replica, it waits. The timeout here turns that hang into the failure
+    # the retry path is built to absorb.
+    client = OpenAI(base_url=args.base_url, api_key="dummy",
+                    timeout=args.request_timeout_s)
     handler = StepsFileCallback(args.steps_file)
 
     # A growing conversation, as in a real ReAct loop: each turn carries
