@@ -171,8 +171,11 @@ rather than smoothed over.
 longer than the measured re-entry price saves **0.000s on every one of the
 fifteen cells**: the longest segment in the interval the source documents
 (Fig. 7, tools 2-29% of the time) is 5.0s against a ~18s cold start measured
-in [vllm-coldstart-probe](https://github.com/MicheleCampi/vllm-coldstart-probe).
-Break-even sits outside the published range. The time is not freed — it is
+in [vllm-coldstart-probe](https://github.com/MicheleCampi/vllm-coldstart-probe)
+under different conditions — Mistral-7B FP16 eager on vLLM 0.22, page cache
+dropped so weight reads hit the SSD, not this workload's Qwen2.5-7B on 0.23.
+A warm page cache would shorten it. Break-even sits outside the published
+range. The time is not freed — it is
 filled, which is what the packing bound quantifies.
 
 **The bound travels with its dispersion.** Three cells were spent repeating
