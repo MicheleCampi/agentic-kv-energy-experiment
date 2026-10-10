@@ -164,7 +164,8 @@ not a convenient simplification:
 
 With 3 hit levels × 2 conditions × 1 model × 3 reps = 18 base runs (+3 if the
 fourth adaptive level is added = 21). Node estimate: 3-5h on Qwen2.5-32B /
-H100 PCIe. Settled once levels and model are fixed.
+H100 PCIe. Settled once levels and model are fixed. The sessions ran on an
+H100 SXM5 (PROVENANCE.md).
 
 ## Capture methodology
 
@@ -258,9 +259,12 @@ other.
 
 **P1 — release per segment.** Frees the GPU on every tool segment longer than
 the re-entry price. Saving = Σ(d − C) over segments with d > C, where C is the
-cold start **measured** in `vllm-coldstart-probe` (~18s, with the 27s/96s
-finding declaring its variance). `--reentry-secs` is mandatory with no
-default: the value must be visible in the command that produced the numbers.
+cold start **measured** in `vllm-coldstart-probe` (~18s). Engine start-up
+varies more than that: two starts of the same model, flags and host took
+27.10 s and 95.66 s in inferscope's validation results
+(`validation-results/README.md`, "Engine init time"). `--reentry-secs` is
+mandatory with no default: the value must be visible in the command that
+produced the numbers.
 
 On the 21/07 A10 anchor, P1 is **0.000s**. It is zero by construction: the
 longest tool segment in the sweep is 5.0s against ~18s of re-entry. **The

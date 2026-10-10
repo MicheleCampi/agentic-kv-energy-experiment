@@ -1,0 +1,2 @@
+Lambda Central Texas, USA, 1x H100 SXM5 (instance type gpu_1x_h100_sxm5), 2026-07-11 09:48 UTC to 11:01 UTC
+Source: Lambda's billing record, transcribed on 2026-10-10. Not captured during the session.

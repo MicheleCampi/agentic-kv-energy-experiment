@@ -2,6 +2,10 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
-sim-results/
+# Simulation outputs stay local, except the directories documents cite.
+sim-results/*
+!sim-results/calibration/
+!sim-results/nsessions-check-n8/
+!sim-results/nsessions-check-n20/
 driver/.venv/
 __pycache__/

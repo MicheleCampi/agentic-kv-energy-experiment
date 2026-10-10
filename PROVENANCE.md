@@ -1,10 +1,13 @@
 # PROVENANCE
 
-Canonical record of the execution environment and of the **provenance of the
-workload parameters**. The JSON files in `results/` and `sim-results/` carry no
-hardware/stack tags: every output is produced under the environment described
-here. Where a per-run snapshot conflicts with this document, the per-run
-snapshot wins.
+Canonical record of the execution environment of the H100 sessions
+(2026-07-09 to 2026-07-11) and of the **provenance of the workload
+parameters**. The sessions' evidence is in `gpu-evidence/`; `results/` holds
+no runs. Later campaigns record their environment next to their own evidence
+(`validation-results-a10-cost/provenance-*.txt`,
+`hack/*/runs/*/PROVENANCE.txt`). Of `sim-results/`, the directories other
+documents cite are published (`calibration/`, `nsessions-check-n8/`,
+`nsessions-check-n20/`); the rest is local working material.
 
 ## Identity of the measurement (inferscope)
 
@@ -66,7 +69,7 @@ This experiment does NOT replicate the paper's setup. Deliberate differences:
 |-----------|----------------------------|------------------------------|
 | model     | Qwen3.6-27B / Gemma4-31B   | Qwen2.5 (consistent w/ series)|
 | vLLM      | v0.20.0, TP=2              | 0.23.0 cu13, single-GPU      |
-| hardware  | 2× H100 NVL, 12 NVLink     | 1× H100 PCIe (Lambda)        |
+| hardware  | 2× H100 NVL, 12 NVLink     | 1× H100 SXM5 (Lambda)        |
 | measures  | time, tokens (OTel/Jaeger) | **per-phase energy** (NVML)  |
 
 Rationale: the goal is not to reproduce the paper's task characterisation but
@@ -76,27 +79,43 @@ the workload is taken from the paper; the hardware and the engine are our own.
 
 ## Hardware
 
-- GPU: NVIDIA H100 PCIe (single device) — *UUID captured per run*
+- GPU: NVIDIA H100 SXM5, single device. The sessions did not capture it.
+  Lambda's billing record names the instance type `gpu_1x_h100_sxm5` for the
+  sessions of 9, 10 and 11 July 2026; each session's
+  `provenance-instance.txt` transcribes it.
+  `hack/gpu-session/00-env.sh:32-34` planned a `node-pins.txt` with the GPU
+  name and the driver; no such file was committed.
 - Host: Lambda Cloud on-demand instance
 
 ## Software stack
 
-- Base OS: lambda-stack-24-04 (Ubuntu 24.04)
-- NVIDIA driver: 580.105.08
-- CUDA: 13.0
-- vLLM: 0.23.0 (cu13 build)
-- Python: *captured per run*
-- inferscope: *HEAD commit captured per run*
+Captured, in the `pip-freeze.txt` of each session stage:
+
+- vLLM 0.23.0, torch 2.11.0, and the CUDA 13 libraries (`cu13` wheels)
+
+Declared, not captured:
+
+- inferscope at `c0bebb9` (`hack/gpu-session/00-env.sh:12`), a release build
+  copied from optim-dev with rsync (`:13`). Its identity was not checked on
+  the node, and its version, 0.3.0, does not tell it apart: `c0bebb9` is
+  `v0.3.0-27`, and the workspace version is 0.3.0 at both.
+- The base OS, the NVIDIA driver and the Python version. The A10 sessions of
+  August record driver 580.105.08 and CUDA 13.0
+  (`hack/*/runs/*/PROVENANCE.txt`); the H100 sessions did not record theirs.
 
 ## Pre-GPU validation
 
 The generator and the capture path are developed and validated against
 `llm-d-inference-sim` (CPU-only, KV-cache enabled) on `optim-dev`, BEFORE any
 GPU hour. Simulation outputs live in `sim-results/` and are kept distinct from
-real energy capture in `results/`. "Validated in simulation" and "measured on
+the GPU evidence in `gpu-evidence/`. "Validated in simulation" and "measured on
 GPU" are never conflated.
 
 ## Per-run capture
 
-The orchestrator writes a machine-readable provenance snapshot alongside every
-run (nvidia-smi, vllm --version, inferscope --version, git HEAD).
+Each run directory holds a `manifest.json` (regime, seed, sessions, token
+counts, realised hit rate, capture window) next to the generator log and the
+inferscope report. Each session stage adds an `engine.json` (engine command,
+PIDs) and a `pip-freeze.txt`. There is no nvidia-smi, `vllm --version`,
+`inferscope --version` or git HEAD snapshot, which this section used to
+promise.
