@@ -219,7 +219,7 @@ def main():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--reentry-secs", type=float, required=True,
                    help="re-entry price C in seconds: a MEASURED cold start "
-                        "(vllm-coldstart-probe: ~18s)")
+                        "(vllm-coldstart-probe: 11.7-19.0 s)")
     p.add_argument("--usd-per-hour", type=float)
     p.add_argument("--usd-per-kwh", type=float)
     p.add_argument("--dry-run", action="store_true",

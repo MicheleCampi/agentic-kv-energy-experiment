@@ -69,7 +69,7 @@ class TestPolicies(unittest.TestCase):
 
     def test_p1_pays_only_above_the_re_entry_price(self):
         # The branch no real cell reaches: on measured evidence every
-        # tool segment is seconds and C is ~18s, so this code would
+        # tool segment is seconds and C is 11.7-19.0 s, so this code would
         # otherwise ship having never executed. One 30s segment repays
         # 12s; the 5s segment beside it repays nothing and must not
         # contribute a negative.

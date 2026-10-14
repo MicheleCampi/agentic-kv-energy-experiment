@@ -11,8 +11,10 @@ Two results from this portfolio meet here for the first time.
 2.3s worst-case service gap, make-before-break, measured on a 3-node A10 fleet.
 That number describes the *fleet*.
 
-**From the cold-start probe:** kernel I/O is only ~7% of an ~18s cold start —
-the rest is GPU warmup, which is to say the KV cache being rebuilt.
+**From the cold-start probe:** with vLLM in eager mode and a cold page cache,
+constructing the engine for a 7B model on an A10 took 11.7 to 19.0 s. The
+probe does not show how that time divides between reading weights and GPU
+work.
 
 Put together they imply something neither measured. **An agent mid-trajectory
 is not a stateless request.** By its fourth turn it carries thousands of tokens

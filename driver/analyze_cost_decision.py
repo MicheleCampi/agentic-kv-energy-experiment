@@ -8,7 +8,7 @@ measured trajectory:
   P1 -- per-segment release. Free the GPU during each tool segment
         longer than the re-entry price C (a measured cold start).
         Saving is sum over tool segments of max(0, d - C). With a cold
-        start of ~18s and tool latencies in the seconds range this is
+        start of 11.7-19.0 s and tool latencies in the seconds range this is
         expected to be ZERO on every cell. That is a result -- it
         falsifies the obvious policy -- not a failure of the script.
 
@@ -121,7 +121,7 @@ def main():
         help="re-entry price C in seconds: a MEASURED cold start. No "
              "default on purpose -- the value must be visible in the "
              "command that produced the numbers (vllm-coldstart-probe: "
-             "~18s; see also the 27s/96s variance finding).")
+             "11.7-19.0 s; see also the 27s/96s variance finding).")
     ap.add_argument("--json-out", help="write per-report results as JSON")
     args = ap.parse_args()
 

@@ -78,8 +78,11 @@ export EXP_COST_SEEDS="42 43 44"
 export EXP_COST_CV_CELL="2.0"
 export EXP_COST_CV="0.5"
 
-# Prezzo di rientro P1: cold start MISURATO da vllm-coldstart-probe, non
-# stimato. Il finding 27s/96s ne dichiara la varianza e viaggia col numero.
+# Prezzo di rientro P1: 18 s, il valore del README di vllm-coldstart-probe
+# finche' 9197aa0 non l'ha tolto; nessuna cattura lo registra. Misurato
+# (analysis/CAPTURES.md): 11,7-19,0 s per un 7B su A10, eager, page cache
+# fredda. P1 = 0 gia' a C = 11,7 s, quindi su tutto l'intervallo.
+# Resta 18 perche' e' il valore delle run. Il finding 27s/96s ne dichiara la varianza e viaggia col numero.
 export EXP_COST_REENTRY_SECS=18
 
 # Base di prezzo: una sola per derivazione (ADR-015 D2). Occupancy, perche'

@@ -259,7 +259,12 @@ other.
 
 **P1 — release per segment.** Frees the GPU on every tool segment longer than
 the re-entry price. Saving = Σ(d − C) over segments with d > C, where C is the
-cold start **measured** in `vllm-coldstart-probe` (~18s). Engine start-up
+cold start **measured** in `vllm-coldstart-probe`: with vLLM in eager mode
+and a cold page cache, constructing the engine for a 7B model on an A10 took
+11.7 to 19.0 s, depending on the checkpoint (`analysis/CAPTURES.md`). The runs
+passed C = 18 s, a figure the probe's README carried until 9197aa0 removed it
+and no capture records. P1 is zero at C = 11.7 s, the low end of that
+interval, and so across all of it. Engine start-up
 varies more than that: two starts of the same model, flags and host took
 27.10 s and 95.66 s in inferscope's validation results
 (`validation-results/README.md`, "Engine init time"). `--reentry-secs` is
@@ -267,7 +272,7 @@ mandatory with no default: the value must be visible in the command that
 produced the numbers.
 
 On the 21/07 A10 anchor, P1 is **0.000s**. It is zero by construction: the
-longest tool segment in the sweep is 5.0s against ~18s of re-entry. **The
+longest tool segment in the sweep is 5.0s against at least 11.7 s of re-entry. **The
 obvious policy is falsified by the measurement, and that is the result to
 publish** — not a negative outcome to bury. The domain of the claim travels
 with it: the saving from interrupted occupancy is real only if the freed GPU
@@ -435,10 +440,10 @@ tool*.
 ### The two policies, tested
 
 **P1 = 0.000s across all fifteen cells.** The longest tool segment in the
-sweep is 5.0s against a measured re-entry price of ~18s: no segment repays
+sweep is 5.0s against a measured re-entry price of 11.7 to 19.0 s: no segment repays
 the release. The obvious policy — free the GPU while the agent waits on a
 tool — is falsified by the measurement across the whole latency interval the
-source covers. Break-even would fall beyond 18 s per tool, outside the
+source covers. Break-even would fall beyond 11.7 s per tool, outside the
 published interval (Fig. 7, tools 2-29% of the time).
 **P2, packing bound**: from 1.02 to 1.59 across the interval. It remains an
 upper bound under declared non-interference.
