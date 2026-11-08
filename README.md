@@ -7,6 +7,15 @@ half keeps turning out to be *nothing*. Three of the six overturned a hypothesis
 I had written down in advance, twice by correcting an earlier campaign of my
 own.
 
+| Campaign | Cells | Result |
+|---|---|---|
+| Energy against cache reuse (Qwen2.5-32B, H100) | 18 | +69.2% tokens/joule at high cache reuse against none |
+| Cost against tool latency (Qwen2.5-7B, A10) | 15 | generation cost flat at $0.00911-0.00916 per trajectory; the +56% in $/M tokens is waiting |
+| Staggered starts | 8 | idle time from 38.5% to 18.0% |
+| Concurrency, N=4 and N=8 | 18 | synchronised trajectories stay idle 37.7% of the time |
+| Realistic arrival | 18 | idle falls to 11.1% with nothing scheduling, 0.3% with random arrival; deliberate spacing is 2.1 points worse |
+| Preemption mid-trajectory | 9 | 28.8s at turn 1, 23.8s at turn 3: a constant; an in-flight request hangs 607 seconds by default |
+
 It starts with two axes:
 
 - **energy against cache reuse** — tokens/joule across KV-cache hit-rate
